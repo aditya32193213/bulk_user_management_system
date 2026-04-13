@@ -13,6 +13,10 @@ A scalable backend API built with **Node.js + Express + MongoDB** that supports 
 
 ---
 
+# 🌐🚀 Live Deployment
+- 🔗 Backend API
+👉**[https://bulk-user-management-system-jgg8.onrender.com/](https://bulk-user-management-system-jgg8.onrender.com/)**
+
 ## Project Structure
 
 ```
