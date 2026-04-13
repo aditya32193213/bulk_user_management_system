@@ -294,11 +294,16 @@ The collection covers:
 
 ## Deployment (Bonus)
 
-The API can be deployed to **Railway** or **Render**:
+Deployed on **Render** with **MongoDB Atlas** as the cloud database.
 
-1. Push to GitHub
-2. Connect repo to Railway / Render
-3. Set `MONGO_URI` to a MongoDB Atlas connection string
-4. Set `PORT` (or leave it — Railway injects it automatically)
+| Item | Value |
+|------|-------|
+| Platform | Render |
+| Database | MongoDB Atlas |
+| Live URL | https://bulk-user-management-system-jgg8.onrender.com |
 
-Deployed URL: *(add after deployment)*
+**Endpoints (live):**
+- `POST` https://bulk-user-management-system-jgg8.onrender.com/api/users/bulk-create
+- `PUT`  https://bulk-user-management-system-jgg8.onrender.com/api/users/bulk-update
+
+> **Note:** Render free tier spins down after inactivity — first request may take ~30s to wake up.

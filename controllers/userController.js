@@ -17,7 +17,7 @@ export const bulkCreateUsers = async (req, res) => {
      */
     const result = await User.insertMany(users, {
       ordered: false,
-      includeResultMetadata: true,  // ← fixed from rawResult
+      includeResultMetadata: true,
     });
 
     return res.status(201).json({
@@ -56,12 +56,40 @@ export const bulkUpdateUsers = async (req, res) => {
     return res.status(400).json({ message: "Request body must be a non-empty array." });
   }
 
+  /*
+   * flattenFields: converts nested objects to dot-notation keys so that
+   * $set performs a PARTIAL subdocument update rather than replacing the
+   * whole object.
+   *
+   * Example:  { deviceInfo: { os: "iOS" } }
+   *    becomes { "deviceInfo.os": "iOS" }
+   *
+   * Without this, sending only deviceInfo.os would silently wipe out
+   * deviceInfo.ipAddress and deviceInfo.deviceType on every update.
+   */
+  const flattenFields = (obj, prefix = "") => {
+    return Object.entries(obj).reduce((acc, [key, value]) => {
+      const fullKey = prefix ? `${prefix}.${key}` : key;
+      if (
+        value !== null &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        !(value instanceof Date)
+      ) {
+        Object.assign(acc, flattenFields(value, fullKey));
+      } else {
+        acc[fullKey] = value;
+      }
+      return acc;
+    }, {});
+  };
+
   const operations = updates.map(({ email, ...fields }) => ({
     updateOne: {
       filter: { email },
       update: {
         $set: {
-          ...fields,
+          ...flattenFields(fields),
           updatedAt: new Date(),
         },
       },
@@ -76,10 +104,9 @@ export const bulkUpdateUsers = async (req, res) => {
     const notFound = updates.length - matched;
 
     /*
-     * If MongoDB matched fewer documents than we sent, some emails don't exist.
-     * bulkWrite does NOT throw an error for unmatched — it silently skips them.
-     * We detect this here and return 207 (Multi-Status) so the caller knows
-     * the operation was only partially successful.
+     * bulkWrite does NOT throw an error for unmatched documents — it silently
+     * skips them. We detect this here and return 207 (Multi-Status) so the
+     * caller knows the operation was only partially successful.
      */
     if (notFound > 0) {
       return res.status(207).json({
