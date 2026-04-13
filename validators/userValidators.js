@@ -6,6 +6,16 @@ const VALID_KYC = ["Pending", "Approved", "Rejected"];
 const VALID_DEVICE_TYPE = ["Mobile", "Desktop"];
 const VALID_OS = ["Android", "iOS", "Windows", "macOS"];
 
+/*
+ * MAX_BATCH_SIZE: Hard cap per request.
+ * The 50mb Express limit is a blunt instrument — a 50mb payload of minimal
+ * user objects could be 500,000+ records. MongoDB insertMany would time out
+ * long before Express rejects it. An explicit size cap gives a clean 400
+ * error with a meaningful message instead of a cryptic DB timeout.
+ */
+const MAX_BATCH_SIZE = 10000;
+
+
 // ── Validates a single user object ──────────────────────────────────
 const validateSingleUser = (user, index) => {
   const errors = [];
@@ -36,6 +46,11 @@ const validateSingleUser = (user, index) => {
     if (typeof user.walletBalance !== "number" || user.walletBalance < 0) {
       errors.push(`[${index}] walletBalance must be a non-negative number.`);
     }
+  }
+
+  // isBlocked (optional but if provided, must be boolean)
+  if (user.isBlocked !== undefined && typeof user.isBlocked !== "boolean") {
+    errors.push(`[${index}] isBlocked must be a boolean (true or false).`);
   }
 
   // kycStatus (optional but if provided, must be in enum)
@@ -79,6 +94,12 @@ export const validateBulkCreate = (req, res, next) => {
     });
   }
 
+  if (users.length > MAX_BATCH_SIZE) {
+    return res.status(400).json({
+      message: `Batch size cannot exceed ${MAX_BATCH_SIZE} records. Received: ${users.length}.`,
+    });
+  }
+
   const allErrors = [];
 
   for (let i = 0; i < users.length; i++) {
@@ -118,12 +139,18 @@ export const validateBulkUpdate = (req, res, next) => {
     });
   }
 
+  if (updates.length > MAX_BATCH_SIZE) {
+    return res.status(400).json({
+      message: `Batch size cannot exceed ${MAX_BATCH_SIZE} records. Received: ${updates.length}.`,
+    });
+  }
+
   const errors = [];
 
-  // ← changed from forEach to for...of so break actually works
   for (let i = 0; i < updates.length; i++) {
     const update = updates[i];
 
+    // email — required as the match key
     if (!update.email || typeof update.email !== "string") {
       errors.push(`[${i}] email is required to identify the user for update.`);
     } else if (!EMAIL_REGEX.test(update.email)) {
@@ -131,27 +158,45 @@ export const validateBulkUpdate = (req, res, next) => {
     }
 
     const { email, ...rest } = update;
+
     if (Object.keys(rest).length === 0) {
       errors.push(`[${i}] No fields provided to update for email "${update.email}".`);
     }
 
+    // fullName (optional, but if provided must be valid)
+    if (rest.fullName !== undefined) {
+      if (typeof rest.fullName !== "string" || rest.fullName.trim().length < 3) {
+        errors.push(`[${i}] fullName must be a string with at least 3 characters.`);
+      }
+    }
+
+    // walletBalance
     if (rest.walletBalance !== undefined) {
       if (typeof rest.walletBalance !== "number" || rest.walletBalance < 0) {
         errors.push(`[${i}] walletBalance must be a non-negative number.`);
       }
     }
-    if (rest.kycStatus !== undefined && !VALID_KYC.includes(rest.kycStatus)) {
-      errors.push(`[${i}] kycStatus "${rest.kycStatus}" is invalid.`);
-    }
-    if (rest.deviceInfo?.deviceType !== undefined &&
-        !VALID_DEVICE_TYPE.includes(rest.deviceInfo.deviceType)) {
-      errors.push(`[${i}] deviceInfo.deviceType "${rest.deviceInfo.deviceType}" is invalid.`);
-    }
-    if (rest.deviceInfo?.os !== undefined && !VALID_OS.includes(rest.deviceInfo.os)) {
-      errors.push(`[${i}] deviceInfo.os "${rest.deviceInfo.os}" is invalid.`);
+
+    // isBlocked — must be a boolean, not a truthy string like "yes"
+    if (rest.isBlocked !== undefined && typeof rest.isBlocked !== "boolean") {
+      errors.push(`[${i}] isBlocked must be a boolean (true or false).`);
     }
 
-    if (errors.length >= 50) {        // ← break actually exits the loop now
+    // kycStatus
+    if (rest.kycStatus !== undefined && !VALID_KYC.includes(rest.kycStatus)) {
+      errors.push(`[${i}] kycStatus "${rest.kycStatus}" is invalid. Must be one of: ${VALID_KYC.join(", ")}.`);
+    }
+
+    // deviceInfo sub-fields
+    if (rest.deviceInfo?.deviceType !== undefined &&
+        !VALID_DEVICE_TYPE.includes(rest.deviceInfo.deviceType)) {
+      errors.push(`[${i}] deviceInfo.deviceType "${rest.deviceInfo.deviceType}" is invalid. Must be: ${VALID_DEVICE_TYPE.join(", ")}.`);
+    }
+    if (rest.deviceInfo?.os !== undefined && !VALID_OS.includes(rest.deviceInfo.os)) {
+      errors.push(`[${i}] deviceInfo.os "${rest.deviceInfo.os}" is invalid. Must be: ${VALID_OS.join(", ")}.`);
+    }
+
+    if (errors.length >= 50) {
       errors.push("...too many errors, stopping early.");
       break;
     }

@@ -26,20 +26,31 @@ export const bulkCreateUsers = async (req, res) => {
       total: users.length,
     });
   } catch (err) {
-    if (err.name === "MongoBulkWriteError" && err.code === 11000) {
-      const inserted = err.result?.nInserted ?? 0;
+    /*
+     * Catch ALL MongoBulkWriteErrors (not just code 11000).
+     * A bulk write can fail for duplicate keys, write concern errors,
+     * or DB-level validation failures — all surface as MongoBulkWriteError.
+     * Narrowing to err.code === 11000 would let non-dupe bulk errors fall
+     * through to a generic 500, losing partial insert metadata.
+     */
+    if (err.name === "MongoBulkWriteError") {
+      const inserted = err.result?.insertedCount ?? 0;
       const failed = users.length - inserted;
 
-      const duplicates = err.writeErrors?.map((e) => ({
-        index: e.index,
-        message: e.errmsg?.match(/dup key: \{(.+?)\}/)?.[0] ?? "Duplicate key",
-      }));
+      const duplicates =
+        err.code === 11000
+          ? err.writeErrors?.map((e) => ({
+              index: e.index,
+              message: e.errmsg?.match(/dup key: \{(.+?)\}/)?.[0] ?? "Duplicate key",
+            }))
+          : undefined;
 
       return res.status(207).json({
         message: "Bulk create partially completed.",
         inserted,
         failed,
-        duplicates,
+        ...(duplicates && { duplicates }),
+        ...(err.code !== 11000 && { error: err.message }),
       });
     }
 
@@ -66,10 +77,19 @@ export const bulkUpdateUsers = async (req, res) => {
    *
    * Without this, sending only deviceInfo.os would silently wipe out
    * deviceInfo.ipAddress and deviceInfo.deviceType on every update.
+   *
+   * Prototype pollution guard: keys like __proto__ or constructor are
+   * skipped to prevent object prototype manipulation via crafted payloads.
    */
   const flattenFields = (obj, prefix = "") => {
     return Object.entries(obj).reduce((acc, [key, value]) => {
       const fullKey = prefix ? `${prefix}.${key}` : key;
+
+      // Guard against prototype pollution
+      if (fullKey.includes("__proto__") || fullKey.includes("constructor") || fullKey.includes("prototype")) {
+        return acc;
+      }
+
       if (
         value !== null &&
         typeof value === "object" &&
@@ -128,8 +148,8 @@ export const bulkUpdateUsers = async (req, res) => {
     if (err.name === "MongoBulkWriteError") {
       return res.status(207).json({
         message: "Bulk update partially completed.",
-        matched: err.result?.nMatched ?? 0,
-        modified: err.result?.nModified ?? 0,
+        matched: err.result?.matchedCount ?? 0,
+        modified: err.result?.modifiedCount ?? 0,
         errors: err.writeErrors?.map((e) => ({
           index: e.index,
           message: e.errmsg,
