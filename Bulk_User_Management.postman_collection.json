@@ -1,0 +1,265 @@
+{
+  "info": {
+    "name": "Bulk User Management System",
+    "_postman_id": "bulk-user-mgmt-v1",
+    "description": "API collection for the Bulk User Management System assignment.\n\nBase URL: {{base_url}}\n\nSet the `base_url` variable to `http://localhost:5000` for local testing.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Bulk Create Users",
+      "item": [
+        {
+          "name": "✅ Bulk Create — 3 Valid Users",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/bulk-create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "bulk-create"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"fullName\": \"Aditya Sharma\",\n    \"email\": \"aditya.sharma@gmail.com\",\n    \"phone\": \"9876543210\",\n    \"walletBalance\": 1500.50,\n    \"kycStatus\": \"Approved\",\n    \"isBlocked\": false,\n    \"deviceInfo\": {\n      \"ipAddress\": \"192.168.1.1\",\n      \"deviceType\": \"Mobile\",\n      \"os\": \"Android\"\n    }\n  },\n  {\n    \"fullName\": \"Priya Verma\",\n    \"email\": \"priya.verma@yahoo.com\",\n    \"phone\": \"9876543211\",\n    \"walletBalance\": 2200.00,\n    \"kycStatus\": \"Pending\",\n    \"isBlocked\": false,\n    \"deviceInfo\": {\n      \"ipAddress\": \"10.0.0.2\",\n      \"deviceType\": \"Desktop\",\n      \"os\": \"Windows\"\n    }\n  },\n  {\n    \"fullName\": \"Rahul Gupta\",\n    \"email\": \"rahul.gupta@outlook.com\",\n    \"phone\": \"9876543212\",\n    \"walletBalance\": 0,\n    \"kycStatus\": \"Rejected\",\n    \"isBlocked\": true,\n    \"deviceInfo\": {\n      \"ipAddress\": \"172.16.0.5\",\n      \"deviceType\": \"Mobile\",\n      \"os\": \"iOS\"\n    }\n  }\n]",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "⚠️ Bulk Create — Partial Failure (1 duplicate email)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/bulk-create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "bulk-create"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"fullName\": \"New User One\",\n    \"email\": \"newuser1@gmail.com\",\n    \"phone\": \"9111111111\",\n    \"walletBalance\": 500\n  },\n  {\n    \"fullName\": \"Aditya Sharma\",\n    \"email\": \"aditya.sharma@gmail.com\",\n    \"phone\": \"9999999999\",\n    \"walletBalance\": 100\n  }\n]",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "❌ Bulk Create — Validation Failure (missing fields)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/bulk-create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "bulk-create"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"fullName\": \"AB\",\n    \"email\": \"not-an-email\",\n    \"phone\": \"abc123xyz\"\n  },\n  {\n    \"fullName\": \"\",\n    \"phone\": \"9876543299\"\n  }\n]",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "❌ Bulk Create — Empty Array",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/bulk-create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "bulk-create"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "[]",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "❌ Bulk Create — Invalid JSON",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/bulk-create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "bulk-create"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{ this is not valid json }",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Bulk Update Users",
+      "item": [
+        {
+          "name": "✅ Bulk Update — Update kycStatus & walletBalance",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/bulk-update",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "bulk-update"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"email\": \"aditya.sharma@gmail.com\",\n    \"kycStatus\": \"Rejected\",\n    \"walletBalance\": 0\n  },\n  {\n    \"email\": \"priya.verma@yahoo.com\",\n    \"kycStatus\": \"Approved\",\n    \"walletBalance\": 5000\n  },\n  {\n    \"email\": \"rahul.gupta@outlook.com\",\n    \"isBlocked\": false,\n    \"kycStatus\": \"Approved\"\n  }\n]",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "✅ Bulk Update — Update deviceInfo",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/bulk-update",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "bulk-update"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"email\": \"aditya.sharma@gmail.com\",\n    \"deviceInfo\": {\n      \"ipAddress\": \"203.0.113.42\",\n      \"deviceType\": \"Desktop\",\n      \"os\": \"macOS\"\n    }\n  }\n]",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "⚠️ Bulk Update — Partial (1 email not found)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/bulk-update",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "bulk-update"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"email\": \"aditya.sharma@gmail.com\",\n    \"kycStatus\": \"Approved\"\n  },\n  {\n    \"email\": \"doesnotexist@nowhere.com\",\n    \"kycStatus\": \"Approved\"\n  }\n]",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "❌ Bulk Update — Validation Failure (no fields to update)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/bulk-update",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "bulk-update"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"email\": \"aditya.sharma@gmail.com\"\n  }\n]",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "❌ Bulk Update — Invalid kycStatus enum",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/bulk-update",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "bulk-update"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"email\": \"aditya.sharma@gmail.com\",\n    \"kycStatus\": \"Verified\"\n  }\n]",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "❌ Bulk Update — Empty Array",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/bulk-update",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "bulk-update"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "[]",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Edge Cases",
+      "item": [
+        {
+          "name": "❌ 404 — Unknown Route",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/unknown",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "unknown"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

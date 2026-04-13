@@ -1,0 +1,23 @@
+{
+  "name": "bulk-user-management",
+  "version": "1.0.0",
+  "description": "Bulk User Management System — Node.js + Express + MongoDB",
+  "main": "src/app.js",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon app.js",
+    "start": "node app.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "mongoose": "^9.4.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
