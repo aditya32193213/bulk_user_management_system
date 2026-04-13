@@ -10,7 +10,7 @@
     "seed": "node scripts/seed.js"
   },
   "keywords": [],
-  "author": "",
+  "author": "Aditya",
   "license": "ISC",
   "dependencies": {
     "cors": "^2.8.6",
