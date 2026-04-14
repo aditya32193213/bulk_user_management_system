@@ -9,6 +9,7 @@ const userSchema = new mongoose.Schema(
       required: [true, "Full name is required"],
       trim: true,
       minlength: [3, "Full name must be at least 3 characters"],
+      maxlength: [100, "Full name cannot exceed 100 characters"],
     },
 
     email: {
@@ -53,8 +54,6 @@ const userSchema = new mongoose.Schema(
       ipAddress: {
         type: String,
       },
-      // FIX (Issue 6): Added object-style enum with custom message to match
-      // kycStatus style and produce meaningful Mongoose validation errors.
       deviceType: {
         type: String,
         enum: {
@@ -73,14 +72,10 @@ const userSchema = new mongoose.Schema(
   },
 
   {
-    // ── System Managed Fields (auto-handled by Mongoose) ──
-    timestamps: true, // adds createdAt and updatedAt automatically
+    timestamps: true,
   }
 );
 
-// ── Indexes ───────────────────────────────────────────────
-// email and phone already have unique: true which creates indexes.
-// Compound index for common admin query pattern: filter by kycStatus + isBlocked.
 userSchema.index({ kycStatus: 1, isBlocked: 1 });
 
 const User = mongoose.model("User", userSchema);

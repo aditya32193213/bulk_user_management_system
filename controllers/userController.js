@@ -1,6 +1,34 @@
 // controllers/userController.js
 import User from "../models/User.js";
 
+const flattenFields = (obj, prefix = "") => {
+  return Object.entries(obj).reduce((acc, [key, value]) => {
+    const fullKey = prefix ? `${prefix}.${key}` : key;
+
+    // Guard against prototype pollution
+    if (
+      fullKey.includes("__proto__") ||
+      fullKey.includes("constructor") ||
+      fullKey.includes("prototype")
+    ) {
+      return acc;
+    }
+
+    if (
+      value !== null &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      !(value instanceof Date)
+    ) {
+      Object.assign(acc, flattenFields(value, fullKey));
+    } else {
+      acc[fullKey] = value;
+    }
+    return acc;
+  }, {});
+};
+
+
 // ── POST /api/users/bulk-create ──────────────────────────────────────
 export const bulkCreateUsers = async (req, res) => {
   const users = req.body;
@@ -68,62 +96,45 @@ export const bulkUpdateUsers = async (req, res) => {
   }
 
   /*
-   * flattenFields: converts nested objects to dot-notation keys so that
-   * $set performs a PARTIAL subdocument update rather than replacing the
-   * whole object.
-   *
-   * Example:  { deviceInfo: { os: "iOS" } }
-   *    becomes { "deviceInfo.os": "iOS" }
-   *
-   * Without this, sending only deviceInfo.os would silently wipe out
-   * deviceInfo.ipAddress and deviceInfo.deviceType on every update.
-   *
-   * Prototype pollution guard: keys like __proto__ or constructor are
-   * skipped to prevent object prototype manipulation via crafted payloads.
+   * FIX (Issue 10): Pre-flight DB lookup to identify unmatched emails.
+   * bulkWrite does NOT throw for unmatched documents — it silently skips
+   * them, so the only way to know which specific emails were not found is to
+   * diff the requested list against what actually exists in the DB.
+   * We do a single lean() query (projection: email only) before the write so
+   * the notFoundEmails list is available for the 207 response body.
+   * This adds one round-trip but eliminates the opaque "notFound: 3" message
+   * that gave callers no actionable information about which records failed.
    */
-  const flattenFields = (obj, prefix = "") => {
-    return Object.entries(obj).reduce((acc, [key, value]) => {
-      const fullKey = prefix ? `${prefix}.${key}` : key;
-
-      // Guard against prototype pollution
-      if (
-        fullKey.includes("__proto__") ||
-        fullKey.includes("constructor") ||
-        fullKey.includes("prototype")
-      ) {
-        return acc;
-      }
-
-      if (
-        value !== null &&
-        typeof value === "object" &&
-        !Array.isArray(value) &&
-        !(value instanceof Date)
-      ) {
-        Object.assign(acc, flattenFields(value, fullKey));
-      } else {
-        acc[fullKey] = value;
-      }
-      return acc;
-    }, {});
-  };
+  const emailList = updates.map((u) => u.email);
+  const foundDocs = await User.find(
+    { email: { $in: emailList } },
+    { email: 1, _id: 0 }
+  ).lean();
+  const matchedEmailSet = new Set(foundDocs.map((d) => d.email));
+  const notFoundEmails = emailList.filter((e) => !matchedEmailSet.has(e));
 
   /*
-   * FIX (Issue 8): email.toLowerCase() added to the filter.
-   * The Mongoose schema stores email in lowercase (lowercase: true).
-   * If the caller sends a mixed-case email like "ADITYA@GMAIL.COM",
-   * the filter { email: "ADITYA@GMAIL.COM" } would match nothing
-   * because the stored value is "aditya@gmail.com".
-   * Normalising here guarantees the filter always matches the stored value.
+   * FIX (Issue 2): Destructure _id, __v, and createdAt out of fields before
+   * passing to $set. Without this, a caller sending any of these keys gets a
+   * cryptic MongoDB write error ("Performing an update on the path '_id' would
+   * modify the immutable field") instead of a clean 422 from the validator.
+   * Stripping them here means the extra keys are silently ignored, which is
+   * the least-surprise behaviour for a bulk-update endpoint.
+   *
+   * FIX (Issue 8): email.toLowerCase() in the filter (already present).
+   * The Mongoose schema stores email in lowercase (lowercase: true). If the
+   * caller sends a mixed-case email, the filter would match nothing. The
+   * validator normalises it to lowercase before it reaches here, but the
+   * .toLowerCase() call is kept as a belt-and-suspenders guard.
    *
    * Note: bulkWrite sends operations directly to the MongoDB driver,
    * bypassing Mongoose middleware and schema validators. This is why
    * the pre-DB validator (userValidators.js) must be airtight — there
    * is no Mongoose safety net here.
    */
-  const operations = updates.map(({ email, ...fields }) => ({
+  const operations = updates.map(({ email, _id, __v, createdAt, ...fields }) => ({
     updateOne: {
-      filter: { email: email.toLowerCase() }, // FIX: normalise to lowercase
+      filter: { email: email.toLowerCase() },
       update: {
         $set: {
           ...flattenFields(fields),
@@ -138,18 +149,17 @@ export const bulkUpdateUsers = async (req, res) => {
 
     const matched = result.matchedCount;
     const modified = result.modifiedCount;
-    const notFound = updates.length - matched;
 
-    /*
-     * bulkWrite does NOT throw for unmatched documents — it silently skips
-     * them. We detect and surface this here with 207 (Multi-Status).
-     */
-    if (notFound > 0) {
+    if (notFoundEmails.length > 0) {
       return res.status(207).json({
         message: "Bulk update partially completed. Some emails were not found.",
         matched,
         modified,
-        notFound,
+        notFound: notFoundEmails.length,
+        // FIX (Issue 10): Surface the exact emails that were not found so the
+        // caller knows which records to investigate without having to cross-
+        // reference the request payload against a bare count.
+        notFoundEmails,
         total: updates.length,
       });
     }

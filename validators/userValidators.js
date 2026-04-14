@@ -33,6 +33,11 @@ const validateSingleUser = (user, index) => {
     errors.push(`[${index}] fullName is required and must be a string.`);
   } else if (user.fullName.trim().length < 3) {
     errors.push(`[${index}] fullName must be at least 3 characters.`);
+  // FIX (Issue 8): Reject fullNames longer than 100 characters.
+  // bulkWrite bypasses Mongoose schema validators so this must be enforced
+  // here; without it a very long name would be written directly to the DB.
+  } else if (user.fullName.trim().length > 100) {
+    errors.push(`[${index}] fullName cannot exceed 100 characters.`);
   }
 
   // email
@@ -110,7 +115,44 @@ export const validateBulkCreate = (req, res, next) => {
 
   const allErrors = [];
 
+  /*
+   * FIX (Issue 9): Intra-batch duplicate detection.
+   * MongoDB's unique index catches DB-level duplicates, but only AFTER a
+   * write attempt — meaning the entire bulkWrite fires before you get the
+   * error back. Catching duplicates here gives an immediate 422 with clear
+   * per-index messages before any DB round-trip occurs.
+   * We normalise email to lowercase to match the Mongoose schema
+   * (lowercase: true) so "A@X.COM" and "a@x.com" are correctly treated
+   * as the same address within the batch.
+   */
+  const emailsSeen = new Set();
+  const phonesSeen = new Set();
+
   for (let i = 0; i < users.length; i++) {
+    // ── Intra-batch duplicate check ───────────────────────
+    const normalEmail = typeof users[i].email === "string"
+      ? users[i].email.toLowerCase()
+      : null;
+
+    if (normalEmail) {
+      if (emailsSeen.has(normalEmail)) {
+        allErrors.push(`[${i}] Duplicate email in this batch: "${normalEmail}".`);
+      } else {
+        emailsSeen.add(normalEmail);
+      }
+    }
+
+    const phone = typeof users[i].phone === "string" ? users[i].phone : null;
+
+    if (phone) {
+      if (phonesSeen.has(phone)) {
+        allErrors.push(`[${i}] Duplicate phone in this batch: "${phone}".`);
+      } else {
+        phonesSeen.add(phone);
+      }
+    }
+
+    // ── Per-field validation ──────────────────────────────
     const errors = validateSingleUser(users[i], i);
     if (errors.length) allErrors.push(...errors);
 
@@ -188,6 +230,10 @@ export const validateBulkUpdate = (req, res, next) => {
     if (rest.fullName !== undefined) {
       if (typeof rest.fullName !== "string" || rest.fullName.trim().length < 3) {
         errors.push(`[${i}] fullName must be a string with at least 3 characters.`);
+      // FIX (Issue 8): Mirror the schema-level maxlength cap here.
+      // bulkWrite bypasses Mongoose validators, so this is the only guard.
+      } else if (rest.fullName.trim().length > 100) {
+        errors.push(`[${i}] fullName cannot exceed 100 characters.`);
       }
     }
 
@@ -226,19 +272,40 @@ export const validateBulkUpdate = (req, res, next) => {
       );
     }
 
-    // deviceInfo sub-fields
-    if (
-      rest.deviceInfo?.deviceType !== undefined &&
-      !VALID_DEVICE_TYPE.includes(rest.deviceInfo.deviceType)
-    ) {
-      errors.push(
-        `[${i}] deviceInfo.deviceType "${rest.deviceInfo.deviceType}" is invalid. Must be: ${VALID_DEVICE_TYPE.join(", ")}.`
-      );
-    }
-    if (rest.deviceInfo?.os !== undefined && !VALID_OS.includes(rest.deviceInfo.os)) {
-      errors.push(
-        `[${i}] deviceInfo.os "${rest.deviceInfo.os}" is invalid. Must be: ${VALID_OS.join(", ")}.`
-      );
+    /*
+     * FIX (Issue 3): Reject deviceInfo: null explicitly.
+     * Without this check, a caller sending { deviceInfo: null } would pass
+     * the sub-field checks below (both optional-chain guards short-circuit)
+     * and reach bulkWrite, where $set: { deviceInfo: null } silently wipes
+     * the entire subdocument — overwriting ipAddress, deviceType, and os
+     * with a single null. Catching it here gives a clean 422 instead.
+     */
+    if (rest.deviceInfo !== undefined) {
+      if (
+        typeof rest.deviceInfo !== "object" ||
+        Array.isArray(rest.deviceInfo) ||
+        rest.deviceInfo === null
+      ) {
+        errors.push(`[${i}] deviceInfo must be a plain object.`);
+      } else {
+        // deviceInfo sub-fields
+        if (
+          rest.deviceInfo.deviceType !== undefined &&
+          !VALID_DEVICE_TYPE.includes(rest.deviceInfo.deviceType)
+        ) {
+          errors.push(
+            `[${i}] deviceInfo.deviceType "${rest.deviceInfo.deviceType}" is invalid. Must be: ${VALID_DEVICE_TYPE.join(", ")}.`
+          );
+        }
+        if (
+          rest.deviceInfo.os !== undefined &&
+          !VALID_OS.includes(rest.deviceInfo.os)
+        ) {
+          errors.push(
+            `[${i}] deviceInfo.os "${rest.deviceInfo.os}" is invalid. Must be: ${VALID_OS.join(", ")}.`
+          );
+        }
+      }
     }
 
     if (errors.length >= 50) {
