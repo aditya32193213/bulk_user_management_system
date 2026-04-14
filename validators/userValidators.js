@@ -1,4 +1,4 @@
-// src/validators/userValidators.js
+// validators/userValidators.js
 
 const EMAIL_REGEX = /^\S+@\S+\.\S+$/;
 
@@ -157,6 +157,7 @@ export const validateBulkUpdate = (req, res, next) => {
 
   for (let i = 0; i < updates.length; i++) {
     const update = updates[i];
+    const emailDisplay = update.email ?? "(missing)";
 
     /*
      * FIX (Issue 12): Normalise email to lowercase before format-checking.
@@ -180,7 +181,7 @@ export const validateBulkUpdate = (req, res, next) => {
     const { email, ...rest } = update;
 
     if (Object.keys(rest).length === 0) {
-      errors.push(`[${i}] No fields provided to update for email "${update.email}".`);
+      errors.push(`[${i}] No fields provided to update for email "${emailDisplay}".`);
     }
 
     // fullName (optional; if provided must be valid)

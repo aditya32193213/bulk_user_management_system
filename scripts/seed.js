@@ -3,8 +3,8 @@
 // Generates 5,000 unique users and POSTs them to the bulk-create endpoint.
 // Run: node scripts/seed.js
 // ─────────────────────────────────────────────────────────────────────────────
-
-const API_URL = "http://localhost:5000/api/users/bulk-create";
+const PORT= process.env.PORT || 5000;
+const API_URL = `http://localhost:${PORT}/api/users/bulk-create`;
 const TOTAL_USERS = 5000;
 const BATCH_SIZE = 1000; // send in batches of 1000 to avoid one giant request
 

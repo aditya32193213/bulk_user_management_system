@@ -23,29 +23,33 @@ A scalable backend API built with **Node.js + Express + MongoDB** that supports 
 
 ```
 bulk-user-management/
-├── src/
-│   ├── config/
-│   │   └── db.js                 # MongoDB connection
-│   ├── controllers/
-│   │   └── userController.js     # Business logic (insertMany, bulkWrite)
-│   ├── middleware/
-│   │   └── errorHandler.js       # Global error handler + 404
-│   ├── models/
-│   │   └── User.js               # Mongoose schema + indexes
-│   ├── routes/
-│   │   └── userRoutes.js         # Route definitions
-│   ├── validators/
-│   │   └── userValidators.js     # Pre-DB validation middleware
-│   ├── app.js                    # Express application setup
-│   └── server.js                 # Entry point — starts DB + HTTP server
+├── config/
+│   └── db.js                 # MongoDB connection
+├── controllers/
+│   └── userController.js     # Business logic (insertMany, bulkWrite)
+├── db_backup/                # mongodump BSON export (generated)
+│   ├── users.bson
+│   └── users.metadata.json
+├── middleware/
+│   └── errorHandler.js       # Global error handler + 404
+├── models/
+│   └── User.js               # Mongoose schema + indexes
+├── routes/
+│   └── userRoutes.js         # Route definitions
 ├── scripts/
-│   └── seed.js                   # Generates & inserts 5,000 test users
-├── db_backup/                    # mongodump BSON export (generated)
-├── users.json                    # mongoexport JSON export (generated)
-├── Bulk_User_Management.postman_collection.json
+│   └── seed.js               # Generates & inserts 5,000 test users
+├── validators/
+│   └── userValidators.js     # Pre-DB validation middleware
 ├── .env
 ├── .env.example
-└── README.md
+├── .gitignore
+├── app.js                    # Express application setup
+├── Bulk_User_Management.postman_collection.json
+├── package-lock.json
+├── package.json
+├── README.md
+├── server.js                 # Entry point — starts DB + HTTP server
+└── users.json                # mongoexport JSON export (generated)
 ```
 
 ---
@@ -55,7 +59,7 @@ bulk-user-management/
 ### 1. Clone the repository
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/aditya32193213/bulk_user_management_system.git
 cd bulk-user-management
 ```
 

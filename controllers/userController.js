@@ -1,4 +1,4 @@
-// src/controllers/userController.js
+// controllers/userController.js
 import User from "../models/User.js";
 
 // ── POST /api/users/bulk-create ──────────────────────────────────────
@@ -41,7 +41,7 @@ export const bulkCreateUsers = async (req, res) => {
         err.code === 11000
           ? err.writeErrors?.map((e) => ({
               index: e.index,
-              message: e.errmsg?.match(/dup key: \{(.+?)\}/)?.[0] ?? "Duplicate key",
+              message: e.errmsg?.match(/dup key: \{(.+?)\}/)?.[1] ?? "Duplicate key",
             }))
           : undefined;
 

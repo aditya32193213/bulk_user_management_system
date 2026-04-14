@@ -1,6 +1,5 @@
-// src/app.js
-// FIX (Issue 3): Changed misleading "Entry point" comment — server.js is the entry point.
-// Express application setup
+// app.js
+
 import express from "express";
 import cors from "cors";
 import helmet from "helmet"; // FIX (Issue 5): Added helmet for HTTP security headers

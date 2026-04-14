@@ -1,4 +1,4 @@
-// src/routes/userRoutes.js
+// routes/userRoutes.js
 import express from "express";
 import { bulkCreateUsers, bulkUpdateUsers } from "../controllers/userController.js";
 import { validateBulkCreate, validateBulkUpdate } from "../validators/userValidators.js";

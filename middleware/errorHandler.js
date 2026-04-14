@@ -1,4 +1,4 @@
-// src/middleware/errorHandler.js
+// middleware/errorHandler.js
 
 // ── 404 Handler ──────────────────────────────────────────────────────
 export const notFound = (req, res, next) => {
