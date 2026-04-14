@@ -129,6 +129,12 @@ export const validateBulkCreate = (req, res, next) => {
   const phonesSeen = new Set();
 
   for (let i = 0; i < users.length; i++) {
+    
+    if (!users[i] || typeof users[i] !== "object" || Array.isArray(users[i])) {
+    allErrors.push(`[${i}] Invalid user object.`);
+    continue; 
+    }
+
     // ── Intra-batch duplicate check ───────────────────────
     const normalEmail = typeof users[i].email === "string"
       ? users[i].email.toLowerCase()
@@ -199,15 +205,14 @@ export const validateBulkUpdate = (req, res, next) => {
 
   for (let i = 0; i < updates.length; i++) {
     const update = updates[i];
+
+    if (!update || typeof update !== "object" || Array.isArray(update)) {
+      errors.push(`[${i}] Invalid update object.`);
+      continue; 
+    }
+
     const emailDisplay = update.email ?? "(missing)";
 
-    /*
-     * FIX (Issue 12): Normalise email to lowercase before format-checking.
-     * The DB stores emails in lowercase (Mongoose schema: lowercase: true).
-     * Accepting mixed-case here without normalising means the controller's
-     * filter would receive e.g. "ADITYA@GMAIL.COM", find nothing, and report
-     * a false "not found". Lowercase first, then validate the format.
-     */
     if (!update.email || typeof update.email !== "string") {
       errors.push(`[${i}] email is required to identify the user for update.`);
     } else {
