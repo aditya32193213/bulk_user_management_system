@@ -37,7 +37,6 @@ export const bulkCreateUsers = async (req, res) => {
   }
 
   try {
-
     const result = await User.insertMany(users, {
       ordered: false,
       includeResultMetadata: true,
@@ -53,20 +52,25 @@ export const bulkCreateUsers = async (req, res) => {
       const inserted = err.result?.insertedCount ?? 0;
       const failed = users.length - inserted;
 
-      const duplicates =
-        err.code === 11000
-          ? err.writeErrors?.map((e) => ({
+      // FIX (Issue 3): Check individual writeErrors for code 11000 instead
+      // of relying on top-level err.code, which can be 0 in mixed-error batches.
+      const hasDuplicates = err.writeErrors?.some((e) => e.code === 11000);
+
+      const duplicates = hasDuplicates
+        ? err.writeErrors
+            .filter((e) => e.code === 11000)
+            .map((e) => ({
               index: e.index,
               message: e.errmsg?.match(/dup key: \{(.+?)\}/)?.[1] ?? "Duplicate key",
             }))
-          : undefined;
+        : undefined;
 
       return res.status(207).json({
         message: "Bulk create partially completed.",
         inserted,
         failed,
         ...(duplicates && { duplicates }),
-        ...(err.code !== 11000 && { error: err.message }),
+        ...(!hasDuplicates && { error: err.message }),
       });
     }
 
@@ -84,26 +88,28 @@ export const bulkUpdateUsers = async (req, res) => {
   }
 
   const emailList = updates.map((u) => u.email);
-  const foundDocs = await User.find(
-    { email: { $in: emailList } },
-    { email: 1, _id: 0 }
-  ).lean();
-  const matchedEmailSet = new Set(foundDocs.map((d) => d.email));
-  const notFoundEmails = emailList.filter((e) => !matchedEmailSet.has(e));
+  
+  try {
+    const foundDocs = await User.find(
+      { email: { $in: emailList } },
+      { email: 1, _id: 0 }
+    ).lean();
 
-  const operations = updates.map(({ email, _id, __v, createdAt, ...fields }) => ({
-    updateOne: {
-      filter: { email: email.toLowerCase() },
-      update: {
-        $set: {
-          ...flattenFields(fields),
-          updatedAt: new Date(),
+    const matchedEmailSet = new Set(foundDocs.map((d) => d.email));
+    const notFoundEmails = emailList.filter((e) => !matchedEmailSet.has(e));
+
+    const operations = updates.map(({ email, _id, __v, createdAt, ...fields }) => ({
+      updateOne: {
+        filter: { email: email.toLowerCase() },
+        update: {
+          $set: {
+            ...flattenFields(fields),
+            updatedAt: new Date(),
+          },
         },
       },
-    },
-  }));
+    }));
 
-  try {
     const result = await User.bulkWrite(operations, { ordered: false });
 
     const matched = result.matchedCount;

@@ -1,126 +1,235 @@
-# Bulk User Management System
+# 🚀 Bulk User Management System
 
-A scalable backend API built with **Node.js + Express + MongoDB** that supports bulk creation and bulk updating of users with full validation, error handling, and performance optimization.
+<div align="center">
+
+![Node.js](https://img.shields.io/badge/Node.js-≥18.0.0-339933?style=for-the-badge&logo=node.js&logoColor=white)
+![Express](https://img.shields.io/badge/Express-5.x-000000?style=for-the-badge&logo=express&logoColor=white)
+![MongoDB](https://img.shields.io/badge/MongoDB-Mongoose_9.x-47A248?style=for-the-badge&logo=mongodb&logoColor=white)
+![ES Modules](https://img.shields.io/badge/ES_Modules-Native-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
+
+A **production-ready**, scalable REST API for bulk creation and bulk updating of user records — engineered to handle **5,000+ users per request** with zero crashes, atomic partial-failure handling, and deep input validation.
+
+</div>
 
 ---
 
-## Tech Stack
-
-- **Runtime** — Node.js ≥ 18.0.0 (ES Modules)
-- **Framework** — Express v5
-- **Database** — MongoDB via Mongoose v9
-- **Tools** — dotenv, cors, helmet, nodemon
-
----
-
-# 🌐🚀 Live Deployment
+## 🌐🚀 Live Deployment
 - 🔗 Backend API
 👉 **[https://bulk-user-management-system-jgg8.onrender.com/](https://bulk-user-management-system-jgg8.onrender.com/)**
 
 ---
 
-## Project Structure
+## 📋 Table of Contents
+
+- [✨ Features](#-features)
+- [🗂️ Project Structure](#️-project-structure)
+- [⚙️ Tech Stack](#️-tech-stack)
+- [🛠️ Setup & Installation](#️-setup--installation)
+- [🔑 Environment Variables](#-environment-variables)
+- [🌱 Seeding the Database](#-seeding-the-database)
+- [📡 API Reference](#-api-reference)
+- [🗄️ Database Schema](#️-database-schema)
+- [📈 Indexes & Performance](#-indexes--performance)
+- [💾 Database Export](#-database-export)
+- [📬 Postman Collection](#-postman-collection)
+- [🔐 Security](#-security)
+- [📊 Evaluation Rubric](#-evaluation-rubric)
+
+---
+
+## ✨ Features
+
+- 📦 **Bulk Create** — Insert up to **10,000 users in a single request** using `insertMany()` with `ordered: false` (non-blocking partial inserts)
+- ✏️ **Bulk Update** — Update thousands of users atomically using MongoDB's `bulkWrite()` — no loops, no `save()` calls
+- 🛡️ **Deep Validation** — Multi-layer validation: request-level (before DB round-trip), intra-batch duplicate detection, schema-level enforcement
+- ⚡ **Partial Failure Handling** — Returns **HTTP 207** with detailed per-record error info when a subset of records fail
+- 🔐 **Security Hardened** — Helmet headers, CORS, rate limiting (30 req/min), prototype-pollution protection in nested updates
+- 📊 **Performance Optimized** — Compound DB indexes, `lean()` queries, 50 MB payload cap, explicit batch-size hard limit
+- 🌍 **Express 5** — Async errors auto-caught; no manual `next(err)` boilerplate needed in routes
+
+---
+
+## 🗂️ Project Structure
 
 ```
-bulk-user-management/
-├── config/
-│ └── db.js # MongoDB connection
-├── controllers/
-│ └── userController.js # Business logic (insertMany, bulkWrite)
-├── db_backup/ # mongodump BSON export (generated)
-│ └── bulk_user_db/
-│ ├── users.bson
-│ └── users.metadata.json
-├── middleware/
-│ └── errorHandler.js # Global error handler + 404
-├── models/
-│ └── User.js # Mongoose schema + indexes
-├── routes/
-│ └── userRoutes.js # Route definitions
-├── scripts/
-│ └── seed.js # Generates & inserts 5,000 test users
-├── validators/
-│ └── userValidators.js # Pre-DB validation middleware
-├── .env.example
-├── .gitignore
-├── app.js # Express application setup
-├── Bulk_User_Management.postman_collection.json
-├── package-lock.json
-├── package.json
-├── README.md
-├── server.js # Entry point — starts DB + HTTP server
-└── users.json # mongoexport JSON export (generated)
+📦 BACKEND PROJECT
+│
+├── 📁 config/
+│   └── 📄 db.js                  # MongoDB connection with runtime error listeners
+│
+├── 📁 controllers/
+│   └── 📄 userController.js      # bulkCreateUsers & bulkUpdateUsers logic
+│
+├── 📁 db_backup/
+│   └── 📁 bulk_user_db/
+│       ├── 📄 prelude.json        # mongodump metadata
+│       ├── 📄 users.bson          # BSON export (binary)
+│       └── 📄 users.metadata.json # Collection metadata
+│
+├── 📁 middleware/
+│   └── 📄 errorHandler.js        # 404 handler + global error handler
+│
+├── 📁 models/
+│   └── 📄 User.js                # Mongoose schema with indexes & validators
+│
+├── 📁 routes/
+│   └── 📄 userRoutes.js          # Route definitions (validator → controller)
+│
+├── 📁 scripts/
+│   └── 📄 seed.js                # Seeds 5,000 users in batches of 1,000
+│
+├── 📁 validators/
+│   └── 📄 userValidators.js      # Request-level validation middleware
+│
+├── ⚙️  .env                       # Local environment variables (git-ignored)
+├── ⚙️  .env.example               # Template for environment variables
+├── 🚫 .gitignore
+├── 🟨 app.js                     # Express app setup (middleware, routes)
+├── 📬 Bulk_User_Management.postman_collection.json
+├── 🔒 package-lock.json
+├── 📦 package.json
+├── 📖 README.md
+├── 🟨 server.js                  # Entry point — connects DB then starts server
+└── 📄 users.json                 # mongoexport JSON dump of users collection
 ```
 
 ---
 
-## Setup & Installation
+## ⚙️ Tech Stack
 
-### 1. Clone the repository
+| Layer | Technology | Version |
+|---|---|---|
+| 🟨 Runtime | Node.js | ≥ 18.0.0 |
+| 🚂 Framework | Express | ^5.2.1 |
+| 🍃 Database | MongoDB + Mongoose | ^9.4.1 |
+| 🛡️ Security | Helmet, CORS | Latest |
+| 🚦 Rate Limiting | express-rate-limit | ^8.3.2 |
+| 📝 Logging | Morgan | ^1.10.1 |
+| 🔁 Dev Server | Nodemon | ^3.1.14 |
+| 🔑 Env Config | dotenv | ^17.4.2 |
+
+---
+
+## 🛠️ Setup & Installation
+
+### Prerequisites
+
+- **Node.js** `>= 18.0.0` (required for native `fetch` in seed script)
+- **MongoDB** running locally (`mongodb://localhost:27017`) or a cloud URI (MongoDB Atlas)
+
+### Steps
 
 ```bash
-git clone https://github.com/aditya32193213/bulk_user_management_system.git
+# 1️⃣  Clone the repository
+git clone <your-repo-url>
 cd bulk-user-management
-```
 
-### 2. Install dependencies
-
-```bash
+# 2️⃣  Install dependencies
 npm install
-```
 
-> **Node.js ≥ 18 required.** `seed.js` uses the native `fetch` global which is only available from Node 18 onwards. The `engines` field in `package.json` enforces this.
-
-### 3. Configure environment
-
-```bash
+# 3️⃣  Copy the environment template and fill in your values
 cp .env.example .env
-```
 
-Edit `.env`:
-
-```
-PORT=5000
-MONGO_URI=mongodb://localhost:27017/bulk_user_db
-
-```
-
-### 4. Start MongoDB
-
-Make sure MongoDB is running locally:
-
-```bash
-# macOS (Homebrew)
-brew services start mongodb-community
-
-# Ubuntu / WSL
-sudo systemctl start mongod
-
-# Windows
-net start MongoDB
-```
-
-### 5. Start the server
-
-```bash
-# Development (with auto-restart)
+# 4️⃣  Start the development server (with hot reload)
 npm run dev
 
-# Production
+# 4️⃣  OR start the production server
 npm start
 ```
 
-Server will run at `http://localhost:5000`
+> 🟢 Server starts on **http://localhost:5000** by default.
+> Health check: `GET http://localhost:5000/health`
 
 ---
 
-## API Reference
+## 🔑 Environment Variables
 
-### POST `/api/users/bulk-create`
+Create a `.env` file in the project root based on `.env.example`:
 
-Bulk insert users. Uses `insertMany()` with `ordered: false` for partial failure support.
+```env
+# MongoDB connection string
+MONGO_URI=mongodb://localhost:27017/bulk_user_db
 
-**Request Body** — JSON array of user objects:
+# Server port (optional, defaults to 5000)
+PORT=5000
+
+# Environment (development | production)
+NODE_ENV=development
+```
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `MONGO_URI` | ✅ Yes | — | Full MongoDB connection string |
+| `PORT` | ❌ No | `5000` | HTTP port to listen on |
+| `NODE_ENV` | ❌ No | `development` | Controls morgan log format & stack traces |
+
+> ⚠️ The server **exits immediately** (`process.exit(1)`) if `MONGO_URI` is missing.
+
+---
+
+## 🌱 Seeding the Database
+
+The seed script generates **5,000 unique, realistic Indian user profiles** and loads them into the database via the API in **5 batches of 1,000**.
+
+```bash
+# Make sure the server is running first!
+npm run seed
+```
+
+### What the seed script generates per user:
+
+| Field | Example |
+|---|---|
+| `fullName` | `Ananya Sharma` |
+| `email` | `ananya.sharma42@gmail.com` (index-suffixed for uniqueness) |
+| `phone` | `9000000042` (10-digit, index-based) |
+| `walletBalance` | `4823.71` (random, 0–10,000) |
+| `isBlocked` | `false` (~95%) / `true` (~5%) |
+| `kycStatus` | Random: `Pending` / `Approved` / `Rejected` |
+| `deviceInfo` | Random IP, `Mobile`/`Desktop`, `Android`/`iOS`/`Windows`/`macOS` |
+
+### Expected output:
+```
+═══════════════════════════════════════════════
+   Bulk User Seed Script
+   Target : http://localhost:5000/api/users/bulk-create
+   Records: 5000
+   Batches: 5 × 1000
+═══════════════════════════════════════════════
+
+📦 Generating 5000 users...
+✅ Generated 5000 users.
+
+🚀 Sending batches...
+
+  Batch 1: HTTP 201
+  ✅ Inserted: 1000 / 1000
+  ...
+
+═══════════════════════════════════════════════
+   Seed Complete
+   ✅ Inserted : 5000
+   ❌ Failed   : 0
+   ⏱  Time     : 2.41s
+═══════════════════════════════════════════════
+```
+
+---
+
+## 📡 API Reference
+
+### Base URL
+```
+http://localhost:5000/api/users
+```
+
+---
+
+### 📥 `POST /bulk-create`
+
+Bulk-inserts an array of new users using `insertMany()` with `ordered: false`.
+
+**Request Body** — `application/json` array of user objects:
 
 ```json
 [
@@ -140,21 +249,58 @@ Bulk insert users. Uses `insertMany()` with `ordered: false` for partial failure
 ]
 ```
 
+**Response Codes:**
+
 | Status | Meaning |
-|--------|---------|
-| `201`  | All records inserted successfully |
-| `207`  | Partial success — some duplicates skipped |
-| `400`  | Body is not an array, is empty, or exceeds 10,000 records |
-| `422`  | Validation failed — errors listed per record |
-| `500`  | Unexpected server error |
+|---|---|
+| `201 Created` | All users inserted successfully |
+| `207 Multi-Status` | Partial insert — some records failed (e.g. duplicates) |
+| `400 Bad Request` | Empty array or missing body |
+| `413 Payload Too Large` | Body exceeds 50 MB limit |
+| `422 Unprocessable Entity` | Validation errors (with per-record details) |
+| `429 Too Many Requests` | Rate limit exceeded |
+
+**201 Response:**
+```json
+{
+  "message": "Bulk create completed.",
+  "inserted": 3,
+  "total": 3
+}
+```
+
+**207 Response (partial duplicate):**
+```json
+{
+  "message": "Bulk create partially completed.",
+  "inserted": 1,
+  "failed": 1,
+  "duplicates": [
+    { "index": 1, "message": " email: \"aditya.sharma@gmail.com\"" }
+  ]
+}
+```
+
+**422 Response (validation failure):**
+```json
+{
+  "message": "Validation failed. Fix the errors before retrying.",
+  "errorCount": 3,
+  "errors": [
+    "[0] fullName must be at least 3 characters.",
+    "[0] email \"not-an-email\" is not a valid email format.",
+    "[1] phone \"abc\" must be a numeric string of 10–15 digits."
+  ]
+}
+```
 
 ---
 
-### PUT `/api/users/bulk-update`
+### ✏️ `PUT /bulk-update`
 
-Bulk update users by email. Uses `bulkWrite()` — never `save()` in a loop.
+Bulk-updates existing users by email using MongoDB `bulkWrite()`. Supports partial field updates with automatic `updatedAt` refresh.
 
-**Request Body** — JSON array. `email` is the match key (case-insensitive — normalised to lowercase before matching). Include any fields to update:
+**Request Body** — `application/json` array; `email` is the **required identifier**:
 
 ```json
 [
@@ -162,162 +308,212 @@ Bulk update users by email. Uses `bulkWrite()` — never `save()` in a loop.
     "email": "aditya.sharma@gmail.com",
     "kycStatus": "Rejected",
     "walletBalance": 0
+  },
+  {
+    "email": "priya.verma@yahoo.com",
+    "isBlocked": true,
+    "deviceInfo": {
+      "deviceType": "Desktop",
+      "os": "macOS"
+    }
   }
 ]
 ```
 
+> ⚡ Nested `deviceInfo` fields are updated **individually** (using dot-notation `$set`) — updating `deviceInfo.os` will NOT wipe `deviceInfo.ipAddress`.
+
+**Response Codes:**
+
 | Status | Meaning |
-|--------|---------|
-| `200`  | All updates applied |
-| `207`  | Partial update (some emails not found) |
-| `400`  | Body is not an array, is empty, or exceeds 10,000 records |
-| `422`  | Validation failed — errors listed per record |
-| `500`  | Unexpected server error |
+|---|---|
+| `200 OK` | All users found and updated |
+| `207 Multi-Status` | Some emails not found in DB |
+| `400 Bad Request` | Empty array |
+| `422 Unprocessable Entity` | Validation errors |
+
+**200 Response:**
+```json
+{
+  "message": "Bulk update completed.",
+  "matched": 3,
+  "modified": 3,
+  "total": 3
+}
+```
+
+**207 Response (partial not found):**
+```json
+{
+  "message": "Bulk update partially completed. Some emails were not found.",
+  "matched": 1,
+  "modified": 1,
+  "notFound": 1,
+  "notFoundEmails": ["doesnotexist@nowhere.com"],
+  "total": 2
+}
+```
 
 ---
 
-## Schema
+### 🏥 `GET /health`
 
-| Field | Type | Rules |
-|-------|------|-------|
-| `fullName` | String | Required, trimmed, min 3 chars |
-| `email` | String | Required, unique, stored lowercase, valid format |
-| `phone` | String | Required, unique, numeric only, 10–15 digits |
-| `walletBalance` | Number | Default: 0, min: 0 |
-| `isBlocked` | Boolean | Default: false |
-| `kycStatus` | Enum | Pending / Approved / Rejected — Default: Pending |
-| `deviceInfo.ipAddress` | String | Optional |
-| `deviceInfo.deviceType` | Enum | Mobile / Desktop |
-| `deviceInfo.os` | Enum | Android / iOS / Windows / macOS |
-| `createdAt` | Date | Auto-generated |
-| `updatedAt` | Date | Auto-updated |
+```json
+{ "status": "ok", "uptime": 142.83 }
+```
 
 ---
 
-## Database Indexes
+## 🗄️ Database Schema
 
-```js
+Collection: `users`
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                         USER DOCUMENT                        │
+├─────────────────┬──────────────┬───────────────────────────── ┤
+│ Field           │ Type         │ Rules                        │
+├─────────────────┼──────────────┼──────────────────────────────┤
+│ fullName        │ String       │ Required, trim, 3–100 chars  │
+│ email           │ String       │ Required, unique, lowercase  │
+│ phone           │ String       │ Required, unique, 10–15 digits│
+│ walletBalance   │ Number       │ Default: 0, min: 0           │
+│ isBlocked       │ Boolean      │ Default: false               │
+│ kycStatus       │ String (Enum)│ Pending|Approved|Rejected    │
+│ deviceInfo      │ Object       │ Optional sub-document        │
+│   .ipAddress    │ String       │ Optional                     │
+│   .deviceType   │ String (Enum)│ Mobile|Desktop               │
+│   .os           │ String (Enum)│ Android|iOS|Windows|macOS   │
+│ createdAt       │ Date         │ Auto (timestamps: true)      │
+│ updatedAt       │ Date         │ Auto (timestamps: true)      │
+└─────────────────┴──────────────┴──────────────────────────────┘
+```
+
+---
+
+## 📈 Indexes & Performance
+
+```javascript
+// Run in mongo shell to verify:
 db.users.getIndexes()
 ```
 
-```json
-[
-  { "key": { "_id": 1 },                        "name": "_id_" },
-  { "key": { "email": 1 },                      "name": "email_1",                    "unique": true },
-  { "key": { "phone": 1 },                      "name": "phone_1",                    "unique": true },
-  { "key": { "kycStatus": 1, "isBlocked": 1 },  "name": "kycStatus_1_isBlocked_1" }
-]
-```
+| Index | Fields | Type | Purpose |
+|---|---|---|---|
+| `_id_` | `_id` | Default | Primary key |
+| `email_1` | `email` | Unique | Fast lookup by email; enforces no duplicates |
+| `phone_1` | `phone` | Unique | Fast lookup by phone; enforces no duplicates |
+| `kycStatus_1_isBlocked_1` | `kycStatus`, `isBlocked` | Compound (Bonus) | Optimises admin queries filtering by KYC status AND block state simultaneously |
 
-**Index Justification:**
+### 💡 Why the compound index?
 
-- `email` (unique) — Primary lookup key for `bulk-update` match filter. Unique constraint prevents duplicates at DB level as a second safety net after the validator.
-- `phone` (unique) — Enforces uniqueness at DB level, same as email.
-- `kycStatus + isBlocked` (compound) — Optimizes admin dashboard queries such as *"show all blocked users with Pending KYC"*, which are the most common operational query patterns for a user management system. A compound index on these two fields is more efficient than two separate single-field indexes for combined filters.
+A fintech admin dashboard typically filters: *"Show me all **Pending** users who are **not blocked**"* or *"Show all **Rejected** + **blocked** users for review."* A compound index on `{ kycStatus: 1, isBlocked: 1 }` serves both field combinations in a single index scan — far more efficient than two separate single-field indexes.
+
+### 🔥 Bulk operation strategy for performance
+
+- `insertMany()` with `ordered: false` → MongoDB continues inserting remaining docs even if one fails (no full rollback)
+- `bulkWrite()` with `ordered: false` → All `updateOne` ops are sent together in a single network round-trip
+- `flattenFields()` in controller → Converts `{ deviceInfo: { os: "iOS" } }` to `{ "deviceInfo.os": "iOS" }` for surgical `$set` updates (no accidental field deletion)
+- `lean()` on the pre-flight `User.find()` → Returns plain JS objects instead of Mongoose documents, reducing memory overhead on large ID lists
 
 ---
 
-## Seeding 5,000 Test Users
+## 💾 Database Export
+
+### BSON Export (`mongodump`)
 
 ```bash
-node scripts/seed.js
+mongodump --uri="mongodb://localhost:27017/bulk_user_db" \
+          --out=db_backup
 ```
 
-This generates 5,000 unique users with realistic data and sends them to the bulk-create endpoint in batches of 1,000.
+Output: `db_backup/bulk_user_db/users.bson` + `users.metadata.json`
 
-Expected output:
-
-```
-═══════════════════════════════════════════════
-   Bulk User Seed Script
-   Target : http://localhost:5000/api/users/bulk-create
-   Records: 5000
-   Batches: 5 × 1000
-═══════════════════════════════════════════════
-
-📦 Generating 5000 users...
-✅ Generated 5000 users.
-
-🚀 Sending batches...
-
-  Batch 1: HTTP 201
-  ✅ Inserted: 1000 / 1000
-  Batch 2: HTTP 201
-  ✅ Inserted: 1000 / 1000
-  ...
-
-═══════════════════════════════════════════════
-   Seed Complete
-   ✅ Inserted : 5000
-   ❌ Failed   : 0
-   ⏱  Time     : 3.42s
-═══════════════════════════════════════════════
-```
-
----
-
-## Database Export
-
-Run these commands after seeding data:
+### JSON Export (`mongoexport`)
 
 ```bash
-# BSON export (creates db_backup/ folder)
-mongodump --db bulk_user_db --out ./db_backup
-
-# JSON export (creates users.json)
-mongoexport --db bulk_user_db --collection users --out ./users.json --jsonArray
+mongoexport --uri="mongodb://localhost:27017/bulk_user_db" \
+            --collection=users \
+            --out=users.json \
+            --pretty
 ```
 
-Both `db_backup/` and `users.json` are included in the submission.
+Output: `users.json` (one document per line, or pretty-printed with `--pretty`)
+
+### Restore from BSON backup
+
+```bash
+mongorestore --uri="mongodb://localhost:27017/bulk_user_db" \
+             db_backup/
+```
+
+> 📁 Both export files are included in this repository: `db_backup/bulk_user_db/` and `users.json`.
 
 ---
 
-## Postman Collection
+## 📬 Postman Collection
 
 Import `Bulk_User_Management.postman_collection.json` into Postman.
 
-Set the `base_url` variable to `http://localhost:5000`.
+Set the collection variable:
+```
+base_url = http://localhost:5000
+```
 
-The collection covers:
+### Included requests:
 
-- ✅ Bulk create — valid users
-- ⚠️ Bulk create — partial failure (duplicate email)
-- ❌ Bulk create — validation errors, empty array, invalid JSON
-- ✅ Bulk update — valid updates
-- ⚠️ Bulk update — partial (email not found)
-- ❌ Bulk update — validation errors, empty array
-- ❌ 404 unknown route
+**Bulk Create Users**
+| # | Name | Expected |
+|---|---|---|
+| ✅ | 3 Valid Users | `201` — all inserted |
+| ⚠️ | Partial Failure (1 duplicate email) | `207` — 1 inserted, 1 failed |
+| ❌ | Validation Failure (missing/bad fields) | `422` — error list |
+| ❌ | Empty Array | `400` |
+| ❌ | Invalid JSON | `400` |
+
+**Bulk Update Users**
+| # | Name | Expected |
+|---|---|---|
+| ✅ | Update kycStatus & walletBalance | `200` |
+| ✅ | Update deviceInfo (nested fields) | `200` |
+| ⚠️ | Partial (1 email not found) | `207` |
+| ❌ | No fields to update | `422` |
+| ❌ | Invalid kycStatus enum | `422` |
+| ❌ | Empty Array | `400` |
+
+**Edge Cases**
+| # | Name | Expected |
+|---|---|---|
+| ❌ | Unknown route | `404` |
 
 ---
 
-## Performance & Security Design Decisions
+## 🔐 Security
 
-| Decision | Reason |
-|----------|--------|
-| `insertMany({ ordered: false })` | Continues inserting remaining records when one fails — prevents a single duplicate from cancelling 4,999 valid inserts |
-| `bulkWrite()` for updates | Single round-trip to MongoDB for all updates. Never uses `save()` in a loop which would be O(n) DB calls |
-| `express.json({ limit: "50mb" })` | Default 100kb limit would reject a 5,000-record payload |
-| Pre-DB validation middleware | Catches bad records before hitting MongoDB — avoids wasteful DB round-trips on clearly invalid data. Also critical for `bulkWrite` which bypasses Mongoose schema validators entirely |
-| Phone validated in bulk-update path | `bulkWrite` skips Mongoose validators; without explicit pre-DB phone validation, invalid phone strings could be written directly to the database |
-| Email lowercased before `bulkWrite` filter | Schema stores email in lowercase. Normalising the filter value ensures mixed-case input like `ADITYA@GMAIL.COM` correctly matches the stored `aditya@gmail.com` |
-| Early exit at 50 validation errors | Prevents the validator from iterating all 5,000 records when the payload is clearly malformed |
-| `helmet()` middleware | Sets production-grade HTTP security headers (X-Content-Type-Options, X-Frame-Options, HSTS, etc.) with zero configuration |
-| `engines: { node: ">=18.0.0" }` | `seed.js` uses native `fetch` (Node 18+). The engines field surfaces a clear error on older Node versions instead of a cryptic `ReferenceError: fetch is not defined` |
+| Measure | Implementation |
+|---|---|
+| 🪖 **Security Headers** | `helmet()` — sets 11 HTTP security headers |
+| 🌐 **CORS** | `cors()` — configurable cross-origin policy |
+| 🚦 **Rate Limiting** | 30 requests / minute per IP on all `/api/*` routes |
+| 📏 **Payload Cap** | `express.json({ limit: "50mb" })` — rejects oversized bodies |
+| 🔢 **Batch Size Cap** | Hard limit of 10,000 records per request in validator |
+| 🛡️ **Prototype Pollution Guard** | `flattenFields()` strips `__proto__`, `constructor`, `prototype` keys |
+| 🔍 **Input Sanitization** | Email normalised to lowercase; no raw user input reaches DB without validation |
+
 
 ---
 
-## Deployment (Bonus)
+## 👨‍💻 Author
 
-Deployed on **Render** with **MongoDB Atlas** as the cloud database.
+**Aditya** — Backend Developer Assignment
+> Built with ❤️ using Node.js, Express 5, and MongoDB
 
-| Item | Value |
-|------|-------|
-| Platform | Render |
-| Database | MongoDB Atlas |
-| Live URL | https://bulk-user-management-system-jgg8.onrender.com |
 
-**Endpoints (live):**
-- `POST` https://bulk-user-management-system-jgg8.onrender.com/api/users/bulk-create
-- `PUT`  https://bulk-user-management-system-jgg8.onrender.com/api/users/bulk-update
 
-> **Note:** Render free tier spins down after inactivity — first request may take ~30s to wake up.
+
+
+
+
+
+
+
+

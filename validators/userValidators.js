@@ -202,13 +202,15 @@ export const validateBulkUpdate = (req, res, next) => {
   }
 
   const errors = [];
+  
+  const emailsSeen = new Set();
 
   for (let i = 0; i < updates.length; i++) {
     const update = updates[i];
 
     if (!update || typeof update !== "object" || Array.isArray(update)) {
       errors.push(`[${i}] Invalid update object.`);
-      continue; 
+      continue;
     }
 
     const emailDisplay = update.email ?? "(missing)";
@@ -220,7 +222,12 @@ export const validateBulkUpdate = (req, res, next) => {
       if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
         errors.push(`[${i}] email "${update.email}" is not valid.`);
       } else {
-        // Mutate in place so the controller receives the normalised value
+        // FIX: Check for intra-batch duplicate AFTER normalization
+        if (emailsSeen.has(normalizedEmail)) {
+          errors.push(`[${i}] Duplicate email in this batch: "${normalizedEmail}".`);
+        } else {
+          emailsSeen.add(normalizedEmail);
+        }
         update.email = normalizedEmail;
       }
     }
