@@ -25,11 +25,7 @@ app.use(helmet());
  * a missing env var fails safe (only localhost can reach the API) rather
  * than silently opening the API to the world.
  */
-app.use(
-  cors({
-    origin: process.env.ALLOWED_ORIGIN || "http://localhost:5000",
-  })
-);
+app.use(cors());
 
 // ── Body Parsing ─────────────────────────────────────────────────────
 // 50mb limit to support bulk payloads of up to ~10,000 user objects.

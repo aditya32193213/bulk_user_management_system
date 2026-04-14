@@ -13,11 +13,6 @@ const startServer = async () => {
   });
 };
 
-/*
- * FIX (Issue 2): Added .catch() so that any unexpected error thrown by
- * connectDB() or app.listen() results in a clean fatal log + exit rather
- * than a silent unhandled promise rejection that Node would otherwise emit.
- */
 startServer().catch((err) => {
   console.error("Fatal startup error:", err.message);
   process.exit(1);
