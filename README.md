@@ -6,16 +6,18 @@ A scalable backend API built with **Node.js + Express + MongoDB** that supports 
 
 ## Tech Stack
 
-- **Runtime** — Node.js (ES Modules)
+- **Runtime** — Node.js ≥ 18.0.0 (ES Modules)
 - **Framework** — Express v5
 - **Database** — MongoDB via Mongoose v9
-- **Tools** — dotenv, cors, nodemon
+- **Tools** — dotenv, cors, helmet, nodemon
 
 ---
 
 # 🌐🚀 Live Deployment
 - 🔗 Backend API
-👉**[https://bulk-user-management-system-jgg8.onrender.com/](https://bulk-user-management-system-jgg8.onrender.com/)**
+👉 **[https://bulk-user-management-system-jgg8.onrender.com/](https://bulk-user-management-system-jgg8.onrender.com/)**
+
+---
 
 ## Project Structure
 
@@ -34,7 +36,8 @@ bulk-user-management/
 │   │   └── userRoutes.js         # Route definitions
 │   ├── validators/
 │   │   └── userValidators.js     # Pre-DB validation middleware
-│   └── app.js                    # Entry point
+│   ├── app.js                    # Express application setup
+│   └── server.js                 # Entry point — starts DB + HTTP server
 ├── scripts/
 │   └── seed.js                   # Generates & inserts 5,000 test users
 ├── db_backup/                    # mongodump BSON export (generated)
@@ -62,6 +65,8 @@ cd bulk-user-management
 npm install
 ```
 
+> **Node.js ≥ 18 required.** `seed.js` uses the native `fetch` global which is only available from Node 18 onwards. The `engines` field in `package.json` enforces this.
+
 ### 3. Configure environment
 
 ```bash
@@ -73,6 +78,11 @@ Edit `.env`:
 ```
 PORT=5000
 MONGO_URI=mongodb://localhost:27017/bulk_user_db
+NODE_ENV=development
+
+# Set this to your actual client origin in production.
+# Leaving it unset fails safe — only localhost can reach the API.
+ALLOWED_ORIGIN=http://localhost:5000
 ```
 
 ### 4. Start MongoDB
@@ -134,7 +144,7 @@ Bulk insert users. Uses `insertMany()` with `ordered: false` for partial failure
 |--------|---------|
 | `201`  | All records inserted successfully |
 | `207`  | Partial success — some duplicates skipped |
-| `400`  | Body is not an array or is empty |
+| `400`  | Body is not an array, is empty, or exceeds 10,000 records |
 | `422`  | Validation failed — errors listed per record |
 | `500`  | Unexpected server error |
 
@@ -144,7 +154,7 @@ Bulk insert users. Uses `insertMany()` with `ordered: false` for partial failure
 
 Bulk update users by email. Uses `bulkWrite()` — never `save()` in a loop.
 
-**Request Body** — JSON array. `email` is the match key. Include any fields to update:
+**Request Body** — JSON array. `email` is the match key (case-insensitive — normalised to lowercase before matching). Include any fields to update:
 
 ```json
 [
@@ -160,7 +170,7 @@ Bulk update users by email. Uses `bulkWrite()` — never `save()` in a loop.
 |--------|---------|
 | `200`  | All updates applied |
 | `207`  | Partial update (some emails not found) |
-| `400`  | Body is not an array or is empty |
+| `400`  | Body is not an array, is empty, or exceeds 10,000 records |
 | `422`  | Validation failed — errors listed per record |
 | `500`  | Unexpected server error |
 
@@ -171,8 +181,8 @@ Bulk update users by email. Uses `bulkWrite()` — never `save()` in a loop.
 | Field | Type | Rules |
 |-------|------|-------|
 | `fullName` | String | Required, trimmed, min 3 chars |
-| `email` | String | Required, unique, lowercase, valid format |
-| `phone` | String | Required, unique, numeric only |
+| `email` | String | Required, unique, stored lowercase, valid format |
+| `phone` | String | Required, unique, numeric only, 10–15 digits |
 | `walletBalance` | Number | Default: 0, min: 0 |
 | `isBlocked` | Boolean | Default: false |
 | `kycStatus` | Enum | Pending / Approved / Rejected — Default: Pending |
@@ -201,7 +211,7 @@ db.users.getIndexes()
 
 **Index Justification:**
 
-- `email` (unique) — Primary lookup key for `bulk-update` match filter. Unique constraint prevents duplicates at DB level as a second safety net after validator.
+- `email` (unique) — Primary lookup key for `bulk-update` match filter. Unique constraint prevents duplicates at DB level as a second safety net after the validator.
 - `phone` (unique) — Enforces uniqueness at DB level, same as email.
 - `kycStatus + isBlocked` (compound) — Optimizes admin dashboard queries such as *"show all blocked users with Pending KYC"*, which are the most common operational query patterns for a user management system. A compound index on these two fields is more efficient than two separate single-field indexes for combined filters.
 
@@ -280,15 +290,20 @@ The collection covers:
 
 ---
 
-## Performance Design Decisions
+## Performance & Security Design Decisions
 
 | Decision | Reason |
 |----------|--------|
 | `insertMany({ ordered: false })` | Continues inserting remaining records when one fails — prevents a single duplicate from cancelling 4,999 valid inserts |
 | `bulkWrite()` for updates | Single round-trip to MongoDB for all updates. Never uses `save()` in a loop which would be O(n) DB calls |
 | `express.json({ limit: "50mb" })` | Default 100kb limit would reject a 5,000-record payload |
-| Pre-DB validation middleware | Catches bad records before hitting MongoDB — avoids wasteful DB round-trips on clearly invalid data |
+| Pre-DB validation middleware | Catches bad records before hitting MongoDB — avoids wasteful DB round-trips on clearly invalid data. Also critical for `bulkWrite` which bypasses Mongoose schema validators entirely |
+| Phone validated in bulk-update path | `bulkWrite` skips Mongoose validators; without explicit pre-DB phone validation, invalid phone strings could be written directly to the database |
+| Email lowercased before `bulkWrite` filter | Schema stores email in lowercase. Normalising the filter value ensures mixed-case input like `ADITYA@GMAIL.COM` correctly matches the stored `aditya@gmail.com` |
 | Early exit at 50 validation errors | Prevents the validator from iterating all 5,000 records when the payload is clearly malformed |
+| `helmet()` middleware | Sets production-grade HTTP security headers (X-Content-Type-Options, X-Frame-Options, HSTS, etc.) with zero configuration |
+| Restricted CORS origin | `cors()` with no options allows every origin. Explicit `ALLOWED_ORIGIN` env var means a misconfigured production deploy fails safe rather than silently open |
+| `engines: { node: ">=18.0.0" }` | `seed.js` uses native `fetch` (Node 18+). The engines field surfaces a clear error on older Node versions instead of a cryptic `ReferenceError: fetch is not defined` |
 
 ---
 
