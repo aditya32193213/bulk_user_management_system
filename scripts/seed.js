@@ -3,7 +3,7 @@
 // Generates 5,000 unique users and POSTs them to the bulk-create endpoint.
 // Run: node scripts/seed.js
 // ─────────────────────────────────────────────────────────────────────────────
-const PORT= process.env.PORT || 5000;
+const PORT = process.env.PORT || 5000;
 const API_URL = `http://localhost:${PORT}/api/users/bulk-create`;
 const TOTAL_USERS = 5000;
 const BATCH_SIZE = 1000; // send in batches of 1000 to avoid one giant request
@@ -92,28 +92,32 @@ const chunkArray = (arr, size) => {
 
 // ── Send a single batch ───────────────────────────────────────────────────────
 const sendBatch = async (batch, batchNumber) => {
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(batch),
-  });
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(batch),
+    });
 
-  const data = await res.json();
+    const data = await res.json();
+    console.log(`  Batch ${batchNumber}: HTTP ${res.status}`);
 
-  console.log(`  Batch ${batchNumber}: HTTP ${res.status}`);
-
-  if (res.status === 201) {
-    console.log(`  ✅ Inserted: ${data.inserted} / ${data.total}`);
-  } else if (res.status === 207) {
-    console.log(`  ⚠️  Partial: Inserted ${data.inserted}, Failed ${data.failed}`);
-    if (data.duplicates?.length) {
-      console.log(`     Duplicates: ${data.duplicates.length} records`);
+    if (res.status === 201) {
+      console.log(`  ✅ Inserted: ${data.inserted} / ${data.total}`);
+    } else if (res.status === 207) {
+      console.log(`  ⚠️  Partial: Inserted ${data.inserted}, Failed ${data.failed}`);
+      if (data.duplicates?.length) {
+        console.log(`     Duplicates: ${data.duplicates.length} records`);
+      }
+    } else {
+      console.log(`  ❌ Error:`, data.message);
     }
-  } else {
-    console.log(`  ❌ Error:`, data.message);
-  }
 
-  return data;
+    return data;
+  } catch (err) {
+    console.error(`  ❌ Batch ${batchNumber} network/parse error: ${err.message}`);
+    return { inserted: 0, failed: batch.length };
+  }
 };
 
 // ── Main ──────────────────────────────────────────────────────────────────────

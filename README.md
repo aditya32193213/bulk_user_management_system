@@ -40,7 +40,6 @@ bulk-user-management/
 │   └── seed.js               # Generates & inserts 5,000 test users
 ├── validators/
 │   └── userValidators.js     # Pre-DB validation middleware
-├── .env
 ├── .env.example
 ├── .gitignore
 ├── app.js                    # Express application setup
@@ -82,11 +81,7 @@ Edit `.env`:
 ```
 PORT=5000
 MONGO_URI=mongodb://localhost:27017/bulk_user_db
-NODE_ENV=development
 
-# Set this to your actual client origin in production.
-# Leaving it unset fails safe — only localhost can reach the API.
-ALLOWED_ORIGIN=http://localhost:5000
 ```
 
 ### 4. Start MongoDB
@@ -306,7 +301,6 @@ The collection covers:
 | Email lowercased before `bulkWrite` filter | Schema stores email in lowercase. Normalising the filter value ensures mixed-case input like `ADITYA@GMAIL.COM` correctly matches the stored `aditya@gmail.com` |
 | Early exit at 50 validation errors | Prevents the validator from iterating all 5,000 records when the payload is clearly malformed |
 | `helmet()` middleware | Sets production-grade HTTP security headers (X-Content-Type-Options, X-Frame-Options, HSTS, etc.) with zero configuration |
-| Restricted CORS origin | `cors()` with no options allows every origin. Explicit `ALLOWED_ORIGIN` env var means a misconfigured production deploy fails safe rather than silently open |
 | `engines: { node: ">=18.0.0" }` | `seed.js` uses native `fetch` (Node 18+). The engines field surfaces a clear error on older Node versions instead of a cryptic `ReferenceError: fetch is not defined` |
 
 ---

@@ -1,10 +1,7 @@
-// src/server.js
-import dotenv from "dotenv";
-dotenv.config();
-
+// server.js
+import "dotenv/config"; // ← static import, hoisted before all other modules evaluate
 import app from "./app.js";
 import connectDB from "./config/db.js";
-
 
 const PORT = process.env.PORT || 5000;
 
