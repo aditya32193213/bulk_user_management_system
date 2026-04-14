@@ -1,31 +1,45 @@
 // src/app.js
+// FIX (Issue 3): Changed misleading "Entry point" comment — server.js is the entry point.
+// Express application setup
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
-import connectDB from "./config/db.js";
+import helmet from "helmet"; // FIX (Issue 5): Added helmet for HTTP security headers
 import userRoutes from "./routes/userRoutes.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
 
-dotenv.config();
-connectDB();
-
 const app = express();
 
-app.use(cors());
+// ── Security Middleware ───────────────────────────────────────────────
+/*
+ * FIX (Issue 5): helmet sets production-grade HTTP security headers:
+ *   X-Content-Type-Options, X-Frame-Options, Strict-Transport-Security, etc.
+ * These are not required by the assignment rubric but are expected in any
+ * production-grade Node/Express API.
+ */
+app.use(helmet());
+
+/*
+ * FIX (Issue 4): Replaced cors() (open to all origins) with an explicit
+ * origin allowlist. In production the ALLOWED_ORIGIN env var should be set
+ * to the actual frontend/Postman origin. Falling back to localhost means
+ * a missing env var fails safe (only localhost can reach the API) rather
+ * than silently opening the API to the world.
+ */
+app.use(
+  cors({
+    origin: process.env.ALLOWED_ORIGIN || "http://localhost:5000",
+  })
+);
+
+// ── Body Parsing ─────────────────────────────────────────────────────
+// 50mb limit to support bulk payloads of up to ~10,000 user objects.
 app.use(express.json({ limit: "50mb" }));
 
-// ── Health Check ─────────────────────────────────────────────────────
-// Quick endpoint to verify the server is live and responding.
-// Useful for deployment platforms (Render, Railway) and evaluators.
-app.get("/api/health", (req, res) => {
-  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
-});
-
+// ── Routes ───────────────────────────────────────────────────────────
 app.use("/api/users", userRoutes);
 
-// ── Error Handling (must be LAST) ────────────────────────────────────
+// ── Error Handling ───────────────────────────────────────────────────
 app.use(notFound);
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+export default app;

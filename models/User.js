@@ -1,4 +1,4 @@
-// models/User.js
+// src/models/User.js
 import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
@@ -23,7 +23,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: [true, "Phone number is required"],
       unique: true,
-      match: [/^\d+$/, "Phone number must contain only digits"],
+      match: [/^\d{10,15}$/, "Phone number must be 10–15 digits"],
     },
 
     // ── Financial Fields ──────────────────────────────────
@@ -53,13 +53,21 @@ const userSchema = new mongoose.Schema(
       ipAddress: {
         type: String,
       },
+      // FIX (Issue 6): Added object-style enum with custom message to match
+      // kycStatus style and produce meaningful Mongoose validation errors.
       deviceType: {
         type: String,
-        enum: ["Mobile", "Desktop"],
+        enum: {
+          values: ["Mobile", "Desktop"],
+          message: "deviceType must be Mobile or Desktop",
+        },
       },
       os: {
         type: String,
-        enum: ["Android", "iOS", "Windows", "macOS"],
+        enum: {
+          values: ["Android", "iOS", "Windows", "macOS"],
+          message: "os must be Android, iOS, Windows, or macOS",
+        },
       },
     },
   },
@@ -72,7 +80,7 @@ const userSchema = new mongoose.Schema(
 
 // ── Indexes ───────────────────────────────────────────────
 // email and phone already have unique: true which creates indexes.
-// Add a compound index if you ever query by kycStatus + isBlocked together.
+// Compound index for common admin query pattern: filter by kycStatus + isBlocked.
 userSchema.index({ kycStatus: 1, isBlocked: 1 });
 
 const User = mongoose.model("User", userSchema);

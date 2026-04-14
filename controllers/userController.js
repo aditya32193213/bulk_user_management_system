@@ -5,6 +5,8 @@ import User from "../models/User.js";
 export const bulkCreateUsers = async (req, res) => {
   const users = req.body;
 
+  // validateBulkCreate middleware already guards this, but kept as a
+  // defensive fallback in case the route is ever called without the middleware.
   if (!Array.isArray(users) || users.length === 0) {
     return res.status(400).json({ message: "Request body must be a non-empty array." });
   }
@@ -30,8 +32,6 @@ export const bulkCreateUsers = async (req, res) => {
      * Catch ALL MongoBulkWriteErrors (not just code 11000).
      * A bulk write can fail for duplicate keys, write concern errors,
      * or DB-level validation failures — all surface as MongoBulkWriteError.
-     * Narrowing to err.code === 11000 would let non-dupe bulk errors fall
-     * through to a generic 500, losing partial insert metadata.
      */
     if (err.name === "MongoBulkWriteError") {
       const inserted = err.result?.insertedCount ?? 0;
@@ -86,7 +86,11 @@ export const bulkUpdateUsers = async (req, res) => {
       const fullKey = prefix ? `${prefix}.${key}` : key;
 
       // Guard against prototype pollution
-      if (fullKey.includes("__proto__") || fullKey.includes("constructor") || fullKey.includes("prototype")) {
+      if (
+        fullKey.includes("__proto__") ||
+        fullKey.includes("constructor") ||
+        fullKey.includes("prototype")
+      ) {
         return acc;
       }
 
@@ -104,9 +108,22 @@ export const bulkUpdateUsers = async (req, res) => {
     }, {});
   };
 
+  /*
+   * FIX (Issue 8): email.toLowerCase() added to the filter.
+   * The Mongoose schema stores email in lowercase (lowercase: true).
+   * If the caller sends a mixed-case email like "ADITYA@GMAIL.COM",
+   * the filter { email: "ADITYA@GMAIL.COM" } would match nothing
+   * because the stored value is "aditya@gmail.com".
+   * Normalising here guarantees the filter always matches the stored value.
+   *
+   * Note: bulkWrite sends operations directly to the MongoDB driver,
+   * bypassing Mongoose middleware and schema validators. This is why
+   * the pre-DB validator (userValidators.js) must be airtight — there
+   * is no Mongoose safety net here.
+   */
   const operations = updates.map(({ email, ...fields }) => ({
     updateOne: {
-      filter: { email },
+      filter: { email: email.toLowerCase() }, // FIX: normalise to lowercase
       update: {
         $set: {
           ...flattenFields(fields),
@@ -124,9 +141,8 @@ export const bulkUpdateUsers = async (req, res) => {
     const notFound = updates.length - matched;
 
     /*
-     * bulkWrite does NOT throw an error for unmatched documents — it silently
-     * skips them. We detect this here and return 207 (Multi-Status) so the
-     * caller knows the operation was only partially successful.
+     * bulkWrite does NOT throw for unmatched documents — it silently skips
+     * them. We detect and surface this here with 207 (Multi-Status).
      */
     if (notFound > 0) {
       return res.status(207).json({

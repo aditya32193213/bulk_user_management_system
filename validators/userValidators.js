@@ -1,7 +1,15 @@
-// src/validators/userValidator.js
+// src/validators/userValidators.js
 
 const EMAIL_REGEX = /^\S+@\S+\.\S+$/;
-const NUMERIC_REGEX = /^\d+$/;
+
+/*
+ * FIX (Issue 11): Changed from /^\d+$/ to /^\d{10,15}$/.
+ * The old regex accepted any non-empty digit string, including "1".
+ * For an Indian user management system, phone numbers must be 10–15 digits
+ * (10 for domestic, up to 15 per ITU-T E.164 international standard).
+ */
+const PHONE_REGEX = /^\d{10,15}$/;
+
 const VALID_KYC = ["Pending", "Approved", "Rejected"];
 const VALID_DEVICE_TYPE = ["Mobile", "Desktop"];
 const VALID_OS = ["Android", "iOS", "Windows", "macOS"];
@@ -16,7 +24,7 @@ const VALID_OS = ["Android", "iOS", "Windows", "macOS"];
 const MAX_BATCH_SIZE = 10000;
 
 
-// ── Validates a single user object ──────────────────────────────────
+// ── Validates a single user object (used by bulk-create) ─────────────
 const validateSingleUser = (user, index) => {
   const errors = [];
 
@@ -34,33 +42,33 @@ const validateSingleUser = (user, index) => {
     errors.push(`[${index}] email "${user.email}" is not a valid email format.`);
   }
 
-  // phone
+  // phone — FIX (Issue 11): now enforces 10–15 digit minimum
   if (!user.phone || typeof user.phone !== "string") {
     errors.push(`[${index}] phone is required and must be a string.`);
-  } else if (!NUMERIC_REGEX.test(user.phone)) {
-    errors.push(`[${index}] phone "${user.phone}" must contain only digits.`);
+  } else if (!PHONE_REGEX.test(user.phone)) {
+    errors.push(`[${index}] phone "${user.phone}" must be a numeric string of 10–15 digits.`);
   }
 
-  // walletBalance (optional but if provided, must be valid)
+  // walletBalance (optional; if provided must be a non-negative number)
   if (user.walletBalance !== undefined) {
     if (typeof user.walletBalance !== "number" || user.walletBalance < 0) {
       errors.push(`[${index}] walletBalance must be a non-negative number.`);
     }
   }
 
-  // isBlocked (optional but if provided, must be boolean)
+  // isBlocked (optional; if provided must be boolean)
   if (user.isBlocked !== undefined && typeof user.isBlocked !== "boolean") {
     errors.push(`[${index}] isBlocked must be a boolean (true or false).`);
   }
 
-  // kycStatus (optional but if provided, must be in enum)
+  // kycStatus (optional; if provided must be in enum)
   if (user.kycStatus !== undefined && !VALID_KYC.includes(user.kycStatus)) {
     errors.push(
       `[${index}] kycStatus "${user.kycStatus}" is invalid. Must be one of: ${VALID_KYC.join(", ")}.`
     );
   }
 
-  // deviceInfo (optional, but sub-fields validated if present)
+  // deviceInfo (optional; sub-fields validated if present)
   if (user.deviceInfo !== undefined) {
     if (typeof user.deviceInfo !== "object" || Array.isArray(user.deviceInfo)) {
       errors.push(`[${index}] deviceInfo must be an object.`);
@@ -107,9 +115,9 @@ export const validateBulkCreate = (req, res, next) => {
     if (errors.length) allErrors.push(...errors);
 
     /*
-     * PERF GUARD: If errors exceed 50 we stop early.
-     * No point validating all 5,000 records if the first 50 are already broken.
-     * Protects against malformed bulk payloads hanging the server.
+     * PERF GUARD: Stop after 50 errors.
+     * No point validating all 5,000 records if the first 50 are already
+     * broken. Protects against malformed bulk payloads hanging the server.
      */
     if (allErrors.length >= 50) {
       allErrors.push("...too many errors, fix the above issues first.");
@@ -150,11 +158,23 @@ export const validateBulkUpdate = (req, res, next) => {
   for (let i = 0; i < updates.length; i++) {
     const update = updates[i];
 
-    // email — required as the match key
+    /*
+     * FIX (Issue 12): Normalise email to lowercase before format-checking.
+     * The DB stores emails in lowercase (Mongoose schema: lowercase: true).
+     * Accepting mixed-case here without normalising means the controller's
+     * filter would receive e.g. "ADITYA@GMAIL.COM", find nothing, and report
+     * a false "not found". Lowercase first, then validate the format.
+     */
     if (!update.email || typeof update.email !== "string") {
       errors.push(`[${i}] email is required to identify the user for update.`);
-    } else if (!EMAIL_REGEX.test(update.email)) {
-      errors.push(`[${i}] email "${update.email}" is not valid.`);
+    } else {
+      const normalizedEmail = update.email.toLowerCase();
+      if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+        errors.push(`[${i}] email "${update.email}" is not valid.`);
+      } else {
+        // Mutate in place so the controller receives the normalised value
+        update.email = normalizedEmail;
+      }
     }
 
     const { email, ...rest } = update;
@@ -163,10 +183,26 @@ export const validateBulkUpdate = (req, res, next) => {
       errors.push(`[${i}] No fields provided to update for email "${update.email}".`);
     }
 
-    // fullName (optional, but if provided must be valid)
+    // fullName (optional; if provided must be valid)
     if (rest.fullName !== undefined) {
       if (typeof rest.fullName !== "string" || rest.fullName.trim().length < 3) {
         errors.push(`[${i}] fullName must be a string with at least 3 characters.`);
+      }
+    }
+
+    /*
+     * FIX (Issue 10): Phone now validated in bulk-update path.
+     * bulkWrite bypasses Mongoose schema validators entirely — it sends
+     * operations directly to the MongoDB driver. Without this check,
+     * a caller could write an invalid phone (e.g. "abc-123") straight
+     * into the database, corrupting the unique phone index.
+     * FIX (Issue 11): Uses the same 10–15 digit regex as bulk-create.
+     */
+    if (rest.phone !== undefined) {
+      if (typeof rest.phone !== "string" || !PHONE_REGEX.test(rest.phone)) {
+        errors.push(
+          `[${i}] phone must be a numeric string of 10–15 digits.`
+        );
       }
     }
 
@@ -184,16 +220,24 @@ export const validateBulkUpdate = (req, res, next) => {
 
     // kycStatus
     if (rest.kycStatus !== undefined && !VALID_KYC.includes(rest.kycStatus)) {
-      errors.push(`[${i}] kycStatus "${rest.kycStatus}" is invalid. Must be one of: ${VALID_KYC.join(", ")}.`);
+      errors.push(
+        `[${i}] kycStatus "${rest.kycStatus}" is invalid. Must be one of: ${VALID_KYC.join(", ")}.`
+      );
     }
 
     // deviceInfo sub-fields
-    if (rest.deviceInfo?.deviceType !== undefined &&
-        !VALID_DEVICE_TYPE.includes(rest.deviceInfo.deviceType)) {
-      errors.push(`[${i}] deviceInfo.deviceType "${rest.deviceInfo.deviceType}" is invalid. Must be: ${VALID_DEVICE_TYPE.join(", ")}.`);
+    if (
+      rest.deviceInfo?.deviceType !== undefined &&
+      !VALID_DEVICE_TYPE.includes(rest.deviceInfo.deviceType)
+    ) {
+      errors.push(
+        `[${i}] deviceInfo.deviceType "${rest.deviceInfo.deviceType}" is invalid. Must be: ${VALID_DEVICE_TYPE.join(", ")}.`
+      );
     }
     if (rest.deviceInfo?.os !== undefined && !VALID_OS.includes(rest.deviceInfo.os)) {
-      errors.push(`[${i}] deviceInfo.os "${rest.deviceInfo.os}" is invalid. Must be: ${VALID_OS.join(", ")}.`);
+      errors.push(
+        `[${i}] deviceInfo.os "${rest.deviceInfo.os}" is invalid. Must be: ${VALID_OS.join(", ")}.`
+      );
     }
 
     if (errors.length >= 50) {
