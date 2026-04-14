@@ -103,13 +103,16 @@ const sendBatch = async (batch, batchNumber) => {
     console.log(`  Batch ${batchNumber}: HTTP ${res.status}`);
 
     if (res.status === 201) {
-      console.log(`  ✅ Inserted: ${data.inserted} / ${data.total}`);
-    } else if (res.status === 207) {
-      console.log(`  ⚠️  Partial: Inserted ${data.inserted}, Failed ${data.failed}`);
-      if (data.duplicates?.length) {
-        console.log(`     Duplicates: ${data.duplicates.length} records`);
-      }
-    } else {
+  const inserted = data.inserted ?? data.insertedCount ?? data.count ?? batch.length;
+  console.log(`  ✅ Inserted: ${inserted} / ${data.total ?? batch.length}`);
+} else if (res.status === 207) {
+  const inserted = data.inserted ?? data.insertedCount ?? data.count ?? 0;
+  const failed = data.failed ?? data.failedCount ?? (batch.length - inserted);
+  console.log(`  ⚠️  Partial: Inserted ${inserted}, Failed ${failed}`);
+  if (data.duplicates?.length) {
+    console.log(`     Duplicates: ${data.duplicates.length} records`);
+  }
+} else {
       console.log(`  ❌ Error:`, data.message);
     }
 
@@ -139,11 +142,17 @@ const main = async () => {
 
   const start = Date.now();
 
-  for (let i = 0; i < batches.length; i++) {
-    const result = await sendBatch(batches[i], i + 1);
-    totalInserted += result.inserted ?? 0;
-    totalFailed += result.failed ?? 0;
-  }
+ for (let i = 0; i < batches.length; i++) {
+  const batch = batches[i];
+  const result = await sendBatch(batch, i + 1);
+  
+  // Use the same fallback logic as the per‑batch logging
+  const inserted = result.inserted ?? result.insertedCount ?? result.count ?? batch.length;
+  const failed = result.failed ?? result.failedCount ?? (batch.length - inserted);
+  
+  totalInserted += inserted;
+  totalFailed += failed;
+}
 
   const elapsed = ((Date.now() - start) / 1000).toFixed(2);
 
