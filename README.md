@@ -33,7 +33,6 @@ A **production-ready**, scalable REST API for bulk creation and bulk updating of
 - [💾 Database Export](#-database-export)
 - [📬 Postman Collection](#-postman-collection)
 - [🔐 Security](#-security)
-- [📊 Evaluation Rubric](#-evaluation-rubric)
 
 ---
 
@@ -43,7 +42,7 @@ A **production-ready**, scalable REST API for bulk creation and bulk updating of
 - ✏️ **Bulk Update** — Update thousands of users atomically using MongoDB's `bulkWrite()` — no loops, no `save()` calls
 - 🛡️ **Deep Validation** — Multi-layer validation: request-level (before DB round-trip), intra-batch duplicate detection, schema-level enforcement
 - ⚡ **Partial Failure Handling** — Returns **HTTP 207** with detailed per-record error info when a subset of records fail
-- 🔐 **Security Hardened** — Helmet headers, CORS, rate limiting (30 req/min), prototype-pollution protection in nested updates
+- 🔐 **Security Hardened** — Helmet headers, CORS, rate limiting (300 req/min), prototype-pollution protection in nested updates
 - 📊 **Performance Optimized** — Compound DB indexes, `lean()` queries, 50 MB payload cap, explicit batch-size hard limit
 - 🌍 **Express 5** — Async errors auto-caught; no manual `next(err)` boilerplate needed in routes
 
@@ -121,7 +120,7 @@ A **production-ready**, scalable REST API for bulk creation and bulk updating of
 
 ```bash
 # 1️⃣  Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/aditya32193213/bulk_user_management_system.git
 cd bulk-user-management
 
 # 2️⃣  Install dependencies
@@ -153,15 +152,12 @@ MONGO_URI=mongodb://localhost:27017/bulk_user_db
 # Server port (optional, defaults to 5000)
 PORT=5000
 
-# Environment (development | production)
-NODE_ENV=development
 ```
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `MONGO_URI` | ✅ Yes | — | Full MongoDB connection string |
 | `PORT` | ❌ No | `5000` | HTTP port to listen on |
-| `NODE_ENV` | ❌ No | `development` | Controls morgan log format & stack traces |
 
 > ⚠️ The server **exits immediately** (`process.exit(1)`) if `MONGO_URI` is missing.
 
@@ -396,6 +392,15 @@ Collection: `users`
 // Run in mongo shell to verify:
 db.users.getIndexes()
 ```
+Expected output:
+```json
+[
+  { "v": 2, "key": { "_id": 1 }, "name": "_id_" },
+  { "v": 2, "key": { "email": 1 }, "name": "email_1", "unique": true, "background": false },
+  { "v": 2, "key": { "phone": 1 }, "name": "phone_1", "unique": true, "background": false },
+  { "v": 2, "key": { "kycStatus": 1, "isBlocked": 1 }, "name": "kycStatus_1_isBlocked_1" }
+]
+```
 
 | Index | Fields | Type | Purpose |
 |---|---|---|---|
@@ -492,8 +497,7 @@ base_url = http://localhost:5000
 | Measure | Implementation |
 |---|---|
 | 🪖 **Security Headers** | `helmet()` — sets 11 HTTP security headers |
-| 🌐 **CORS** | `cors()` — configurable cross-origin policy |
-| 🚦 **Rate Limiting** | 30 requests / minute per IP on all `/api/*` routes |
+| 🚦 **Rate Limiting** | 300 requests / minute per IP on all `/api/*` routes |
 | 📏 **Payload Cap** | `express.json({ limit: "50mb" })` — rejects oversized bodies |
 | 🔢 **Batch Size Cap** | Hard limit of 10,000 records per request in validator |
 | 🛡️ **Prototype Pollution Guard** | `flattenFields()` strips `__proto__`, `constructor`, `prototype` keys |

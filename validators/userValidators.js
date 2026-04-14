@@ -1,26 +1,12 @@
 // validators/userValidators.js
 
 const EMAIL_REGEX = /^\S+@\S+\.\S+$/;
-
-/*
- * FIX (Issue 11): Changed from /^\d+$/ to /^\d{10,15}$/.
- * The old regex accepted any non-empty digit string, including "1".
- * For an Indian user management system, phone numbers must be 10–15 digits
- * (10 for domestic, up to 15 per ITU-T E.164 international standard).
- */
 const PHONE_REGEX = /^\d{10,15}$/;
 
 const VALID_KYC = ["Pending", "Approved", "Rejected"];
 const VALID_DEVICE_TYPE = ["Mobile", "Desktop"];
 const VALID_OS = ["Android", "iOS", "Windows", "macOS"];
 
-/*
- * MAX_BATCH_SIZE: Hard cap per request.
- * The 50mb Express limit is a blunt instrument — a 50mb payload of minimal
- * user objects could be 500,000+ records. MongoDB insertMany would time out
- * long before Express rejects it. An explicit size cap gives a clean 400
- * error with a meaningful message instead of a cryptic DB timeout.
- */
 const MAX_BATCH_SIZE = 10000;
 
 
@@ -33,9 +19,6 @@ const validateSingleUser = (user, index) => {
     errors.push(`[${index}] fullName is required and must be a string.`);
   } else if (user.fullName.trim().length < 3) {
     errors.push(`[${index}] fullName must be at least 3 characters.`);
-  // FIX (Issue 8): Reject fullNames longer than 100 characters.
-  // bulkWrite bypasses Mongoose schema validators so this must be enforced
-  // here; without it a very long name would be written directly to the DB.
   } else if (user.fullName.trim().length > 100) {
     errors.push(`[${index}] fullName cannot exceed 100 characters.`);
   }
@@ -47,7 +30,7 @@ const validateSingleUser = (user, index) => {
     errors.push(`[${index}] email "${user.email}" is not a valid email format.`);
   }
 
-  // phone — FIX (Issue 11): now enforces 10–15 digit minimum
+  // phone
   if (!user.phone || typeof user.phone !== "string") {
     errors.push(`[${index}] phone is required and must be a string.`);
   } else if (!PHONE_REGEX.test(user.phone)) {
@@ -114,25 +97,14 @@ export const validateBulkCreate = (req, res, next) => {
   }
 
   const allErrors = [];
-
-  /*
-   * FIX (Issue 9): Intra-batch duplicate detection.
-   * MongoDB's unique index catches DB-level duplicates, but only AFTER a
-   * write attempt — meaning the entire bulkWrite fires before you get the
-   * error back. Catching duplicates here gives an immediate 422 with clear
-   * per-index messages before any DB round-trip occurs.
-   * We normalise email to lowercase to match the Mongoose schema
-   * (lowercase: true) so "A@X.COM" and "a@x.com" are correctly treated
-   * as the same address within the batch.
-   */
   const emailsSeen = new Set();
   const phonesSeen = new Set();
 
   for (let i = 0; i < users.length; i++) {
-    
+
     if (!users[i] || typeof users[i] !== "object" || Array.isArray(users[i])) {
-    allErrors.push(`[${i}] Invalid user object.`);
-    continue; 
+      allErrors.push(`[${i}] Invalid user object.`);
+      continue;
     }
 
     // ── Intra-batch duplicate check ───────────────────────
@@ -162,11 +134,6 @@ export const validateBulkCreate = (req, res, next) => {
     const errors = validateSingleUser(users[i], i);
     if (errors.length) allErrors.push(...errors);
 
-    /*
-     * PERF GUARD: Stop after 50 errors.
-     * No point validating all 5,000 records if the first 50 are already
-     * broken. Protects against malformed bulk payloads hanging the server.
-     */
     if (allErrors.length >= 50) {
       allErrors.push("...too many errors, fix the above issues first.");
       break;
@@ -202,8 +169,8 @@ export const validateBulkUpdate = (req, res, next) => {
   }
 
   const errors = [];
-  
   const emailsSeen = new Set();
+  const phonesSeen = new Set();
 
   for (let i = 0; i < updates.length; i++) {
     const update = updates[i];
@@ -214,54 +181,54 @@ export const validateBulkUpdate = (req, res, next) => {
     }
 
     const emailDisplay = update.email ?? "(missing)";
+let emailValid = false;
 
-    if (!update.email || typeof update.email !== "string") {
-      errors.push(`[${i}] email is required to identify the user for update.`);
+if (!update.email || typeof update.email !== "string") {
+  errors.push(`[${i}] email is required to identify the user for update.`);
+} else {
+  const normalizedEmail = update.email.toLowerCase();
+  if (!EMAIL_REGEX.test(normalizedEmail)) {
+    errors.push(`[${i}] email "${update.email}" is not valid.`);
+  } else {
+    emailValid = true;
+    if (emailsSeen.has(normalizedEmail)) {
+      errors.push(`[${i}] Duplicate email in this batch: "${normalizedEmail}".`);
     } else {
-      const normalizedEmail = update.email.toLowerCase();
-      if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
-        errors.push(`[${i}] email "${update.email}" is not valid.`);
-      } else {
-        // FIX: Check for intra-batch duplicate AFTER normalization
-        if (emailsSeen.has(normalizedEmail)) {
-          errors.push(`[${i}] Duplicate email in this batch: "${normalizedEmail}".`);
-        } else {
-          emailsSeen.add(normalizedEmail);
-        }
-        update.email = normalizedEmail;
-      }
+      emailsSeen.add(normalizedEmail);
     }
+    update.email = normalizedEmail;
+  }
+}
 
-    const { email, ...rest } = update;
+const { email, ...rest } = update;
 
-    if (Object.keys(rest).length === 0) {
-      errors.push(`[${i}] No fields provided to update for email "${emailDisplay}".`);
-    }
+// Only flag "no fields" when email was valid — avoids misleading double error
+if (emailValid && Object.keys(rest).length === 0) {
+  errors.push(`[${i}] No fields provided to update for email "${emailDisplay}".`);
+}
 
     // fullName (optional; if provided must be valid)
     if (rest.fullName !== undefined) {
       if (typeof rest.fullName !== "string" || rest.fullName.trim().length < 3) {
         errors.push(`[${i}] fullName must be a string with at least 3 characters.`);
-      // FIX (Issue 8): Mirror the schema-level maxlength cap here.
-      // bulkWrite bypasses Mongoose validators, so this is the only guard.
       } else if (rest.fullName.trim().length > 100) {
         errors.push(`[${i}] fullName cannot exceed 100 characters.`);
       }
     }
 
-    /*
-     * FIX (Issue 10): Phone now validated in bulk-update path.
-     * bulkWrite bypasses Mongoose schema validators entirely — it sends
-     * operations directly to the MongoDB driver. Without this check,
-     * a caller could write an invalid phone (e.g. "abc-123") straight
-     * into the database, corrupting the unique phone index.
-     * FIX (Issue 11): Uses the same 10–15 digit regex as bulk-create.
-     */
+    // phone — validated and checked for intra-batch duplicates
     if (rest.phone !== undefined) {
       if (typeof rest.phone !== "string" || !PHONE_REGEX.test(rest.phone)) {
         errors.push(
           `[${i}] phone must be a numeric string of 10–15 digits.`
         );
+      } else {
+        // FIX (Issue 6): Intra-batch duplicate phone detection for update path.
+        if (phonesSeen.has(rest.phone)) {
+          errors.push(`[${i}] Duplicate phone in this batch: "${rest.phone}".`);
+        } else {
+          phonesSeen.add(rest.phone);
+        }
       }
     }
 
@@ -272,7 +239,7 @@ export const validateBulkUpdate = (req, res, next) => {
       }
     }
 
-    // isBlocked — must be a boolean, not a truthy string like "yes"
+    // isBlocked
     if (rest.isBlocked !== undefined && typeof rest.isBlocked !== "boolean") {
       errors.push(`[${i}] isBlocked must be a boolean (true or false).`);
     }
@@ -284,14 +251,7 @@ export const validateBulkUpdate = (req, res, next) => {
       );
     }
 
-    /*
-     * FIX (Issue 3): Reject deviceInfo: null explicitly.
-     * Without this check, a caller sending { deviceInfo: null } would pass
-     * the sub-field checks below (both optional-chain guards short-circuit)
-     * and reach bulkWrite, where $set: { deviceInfo: null } silently wipes
-     * the entire subdocument — overwriting ipAddress, deviceType, and os
-     * with a single null. Catching it here gives a clean 422 instead.
-     */
+    // deviceInfo
     if (rest.deviceInfo !== undefined) {
       if (
         typeof rest.deviceInfo !== "object" ||
@@ -300,7 +260,6 @@ export const validateBulkUpdate = (req, res, next) => {
       ) {
         errors.push(`[${i}] deviceInfo must be a plain object.`);
       } else {
-        // deviceInfo sub-fields
         if (
           rest.deviceInfo.deviceType !== undefined &&
           !VALID_DEVICE_TYPE.includes(rest.deviceInfo.deviceType)

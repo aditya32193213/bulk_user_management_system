@@ -49,30 +49,32 @@ export const bulkCreateUsers = async (req, res) => {
     });
   } catch (err) {
     if (err.name === "MongoBulkWriteError") {
-      const inserted = err.result?.insertedCount ?? 0;
-      const failed = users.length - inserted;
+  const inserted = err.result?.insertedCount ?? 0;
+  const failed = users.length - inserted;
 
-      // FIX (Issue 3): Check individual writeErrors for code 11000 instead
-      // of relying on top-level err.code, which can be 0 in mixed-error batches.
-      const hasDuplicates = err.writeErrors?.some((e) => e.code === 11000);
+  const writeErrors = err.writeErrors ?? [];
+  const duplicateErrors = writeErrors.filter((e) => e.code === 11000);
+  const otherErrors = writeErrors.filter((e) => e.code !== 11000);
 
-      const duplicates = hasDuplicates
-        ? err.writeErrors
-            .filter((e) => e.code === 11000)
-            .map((e) => ({
-              index: e.index,
-              message: e.errmsg?.match(/dup key: \{(.+?)\}/)?.[1] ?? "Duplicate key",
-            }))
-        : undefined;
+  const duplicates = duplicateErrors.length > 0
+    ? duplicateErrors.map((e) => ({
+        index: e.index,
+        message: e.errmsg?.match(/dup key: \{(.+?)\}/)?.[1] ?? "Duplicate key",
+      }))
+    : undefined;
 
-      return res.status(207).json({
-        message: "Bulk create partially completed.",
-        inserted,
-        failed,
-        ...(duplicates && { duplicates }),
-        ...(!hasDuplicates && { error: err.message }),
-      });
-    }
+  const errors = otherErrors.length > 0
+    ? otherErrors.map((e) => ({ index: e.index, message: e.errmsg ?? "Write error" }))
+    : undefined;
+
+  return res.status(207).json({
+    message: "Bulk create partially completed.",
+    inserted,
+    failed,
+    ...(duplicates && { duplicates }),
+    ...(errors && { errors }),
+  });
+}
 
     return res.status(500).json({ message: "Server error.", error: err.message });
   }
@@ -88,7 +90,7 @@ export const bulkUpdateUsers = async (req, res) => {
   }
 
   const emailList = updates.map((u) => u.email);
-  
+
   try {
     const foundDocs = await User.find(
       { email: { $in: emailList } },
@@ -97,8 +99,7 @@ export const bulkUpdateUsers = async (req, res) => {
 
     const matchedEmailSet = new Set(foundDocs.map((d) => d.email));
     const notFoundEmails = emailList.filter((e) => !matchedEmailSet.has(e));
-
-    const operations = updates.map(({ email, _id, __v, createdAt, ...fields }) => ({
+    const operations = updates.map(({ email, _id, __v, createdAt, updatedAt, ...fields }) => ({
       updateOne: {
         filter: { email: email.toLowerCase() },
         update: {
