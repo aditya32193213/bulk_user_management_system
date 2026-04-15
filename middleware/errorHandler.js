@@ -1,61 +1,45 @@
-// middleware/errorHandler.js
+import AppError from "../utils/AppError.js";
 
 // ── 404 Handler ──────────────────────────────────────────────────────
 export const notFound = (req, res, next) => {
-  const error = new Error(`Route not found: ${req.method} ${req.originalUrl}`);
-  res.status(404);
-  next(error); // pass to error handler below
+  next(new AppError(`Route not found: ${req.method} ${req.originalUrl}`, 404));
 };
 
-
 // ── Global Error Handler ─────────────────────────────────────────────
-// Must have 4 parameters — Express identifies it as an error handler this way
 export const errorHandler = (err, req, res, next) => {
-  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+  let statusCode = err.statusCode || 500;
+  let message = err.message || "Internal Server Error";
 
-  // Mongoose Validation Error (schema-level, e.g. minlength failed)
+  // Mongoose Validation Error
   if (err.name === "ValidationError") {
-    const messages = Object.values(err.errors).map((e) => e.message);
-    return res.status(422).json({
-      message: "Mongoose validation error.",
-      errors: messages,
-    });
-  }
+    statusCode = 422;
+    message = Object.values(err.errors).map((e) => e.message).join(", ");
 
-  // Mongoose Duplicate Key Error (unique index violation)
-  if (err.code === 11000) {
+  // Duplicate Key
+  } else if (err.code === 11000) {
+    statusCode = 409;
     const field = Object.keys(err.keyValue || {})[0];
-    return res.status(409).json({
-      message: `Duplicate value for field: "${field}".`,
-      field,
-      value: err.keyValue?.[field],
-    });
+    message = `Duplicate value for field: "${field}"`;
+
+  // Cast Error
+  } else if (err.name === "CastError") {
+    statusCode = 400;
+    message = `Invalid value for field "${err.path}": ${err.value}`;
+
+  // Payload too large
+  } else if (err.type === "entity.too.large") {
+    statusCode = 413;
+    message = "Request payload too large.";
+
+  // Invalid JSON
+  } else if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
+    statusCode = 400;
+    message = "Invalid JSON in request body.";
   }
 
-  // Mongoose CastError (e.g. invalid ObjectId)
-  if (err.name === "CastError") {
-    return res.status(400).json({
-      message: `Invalid value for field "${err.path}": ${err.value}`,
-    });
-  }
-
-  // Payload Too Large (express.json limit exceeded)
-  if (err.type === "entity.too.large") {
-    return res.status(413).json({
-      message: "Request payload too large. Reduce batch size.",
-    });
-  }
-
-  // SyntaxError (malformed JSON in request body)
-  if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
-    return res.status(400).json({
-      message: "Invalid JSON in request body.",
-    });
-  }
-
-  // Fallback
   res.status(statusCode).json({
-    message: err.message || "Internal Server Error",
+    success: false,
+    message,
     ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
   });
 };

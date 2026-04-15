@@ -77,6 +77,10 @@ A **production-ready**, scalable REST API for bulk creation and bulk updating of
 ├── 📁 scripts/
 │   └── 📄 seed.js                # Seeds 5,000 users in batches of 1,000
 │
+├── 📁 utils/
+│   ├── 📄 AppError.js            # Operational error class
+│   └── 📄 asyncHandler.js        # Async route wrapper
+│
 ├── 📁 validators/
 │   └── 📄 userValidators.js      # Request-level validation middleware
 │
@@ -121,7 +125,7 @@ A **production-ready**, scalable REST API for bulk creation and bulk updating of
 ```bash
 # 1️⃣  Clone the repository
 git clone https://github.com/aditya32193213/bulk_user_management_system.git
-cd bulk-user-management
+cd bulk_user_management_system
 
 # 2️⃣  Install dependencies
 npm install
@@ -132,7 +136,7 @@ cp .env.example .env
 # 4️⃣  Start the development server (with hot reload)
 npm run dev
 
-# 4️⃣  OR start the production server
+# 5️⃣  OR start the production server
 npm start
 ```
 
@@ -152,14 +156,19 @@ MONGO_URI=mongodb://localhost:27017/bulk_user_db
 # Server port (optional, defaults to 5000)
 PORT=5000
 
+# Environment — affects Morgan log format and error stack traces
+# Use "development" locally, "production" on deployment
+NODE_ENV=development
 ```
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `MONGO_URI` | ✅ Yes | — | Full MongoDB connection string |
 | `PORT` | ❌ No | `5000` | HTTP port to listen on |
+| `NODE_ENV` | ❌ No | `undefined` | Set to `development` locally, `production` on server |
 
 > ⚠️ The server **exits immediately** (`process.exit(1)`) if `MONGO_URI` is missing.
+> 💡 With `NODE_ENV=development`, Morgan uses `dev` format and error responses include a full stack trace. Without it set, behaviour defaults to development mode.
 
 ---
 
@@ -259,6 +268,7 @@ Bulk-inserts an array of new users using `insertMany()` with `ordered: false`.
 **201 Response:**
 ```json
 {
+  "success": true,
   "message": "Bulk create completed.",
   "inserted": 3,
   "total": 3
@@ -268,11 +278,13 @@ Bulk-inserts an array of new users using `insertMany()` with `ordered: false`.
 **207 Response (partial duplicate):**
 ```json
 {
+  "success": true,
   "message": "Bulk create partially completed.",
   "inserted": 1,
   "failed": 1,
+  "total": 2,
   "duplicates": [
-    { "index": 1, "message": " email: \"aditya.sharma@gmail.com\"" }
+    { "index": 1, "message": "E11000 duplicate key error ... email: \"aditya.sharma@gmail.com\"" }
   ]
 }
 ```
@@ -330,6 +342,7 @@ Bulk-updates existing users by email using MongoDB `bulkWrite()`. Supports parti
 **200 Response:**
 ```json
 {
+  "success": true,
   "message": "Bulk update completed.",
   "matched": 3,
   "modified": 3,
@@ -340,6 +353,7 @@ Bulk-updates existing users by email using MongoDB `bulkWrite()`. Supports parti
 **207 Response (partial not found):**
 ```json
 {
+  "success": true,
   "message": "Bulk update partially completed. Some emails were not found.",
   "matched": 1,
   "modified": 1,
@@ -424,6 +438,8 @@ A fintech admin dashboard typically filters: *"Show me all **Pending** users who
 
 ## 💾 Database Export
 
+Both export files are included in this repository: `db_backup/bulk_user_db/` (BSON) and `users.json` (JSON).
+
 ### BSON Export (`mongodump`)
 
 ```bash
@@ -451,7 +467,11 @@ mongorestore --uri="mongodb://localhost:27017/bulk_user_db" \
              db_backup/
 ```
 
-> 📁 Both export files are included in this repository: `db_backup/bulk_user_db/` and `users.json`.
+### Verify indexes after restore
+
+```bash
+mongosh mongodb://localhost:27017/bulk_user_db --eval "db.users.getIndexes()"
+```
 
 ---
 
@@ -510,14 +530,3 @@ base_url = http://localhost:5000
 
 **Aditya** — Backend Developer Assignment
 > Built with ❤️ using Node.js, Express 5, and MongoDB
-
-
-
-
-
-
-
-
-
-
-

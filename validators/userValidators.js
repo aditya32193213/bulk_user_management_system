@@ -101,6 +101,13 @@ export const validateBulkCreate = (req, res, next) => {
   const phonesSeen = new Set();
 
   for (let i = 0; i < users.length; i++) {
+    // FIX: Check the cap at the TOP of the iteration, before pushing more errors.
+    // Previously the check was at the bottom — errors for the current record were
+    // pushed first, potentially taking allErrors beyond 50 before the cap fired.
+    if (allErrors.length >= 50) {
+      allErrors.push("...too many errors, fix the above issues first.");
+      break;
+    }
 
     if (!users[i] || typeof users[i] !== "object" || Array.isArray(users[i])) {
       allErrors.push(`[${i}] Invalid user object.`);
@@ -133,11 +140,6 @@ export const validateBulkCreate = (req, res, next) => {
     // ── Per-field validation ──────────────────────────────
     const errors = validateSingleUser(users[i], i);
     if (errors.length) allErrors.push(...errors);
-
-    if (allErrors.length >= 50) {
-      allErrors.push("...too many errors, fix the above issues first.");
-      break;
-    }
   }
 
   if (allErrors.length > 0) {
@@ -173,6 +175,12 @@ export const validateBulkUpdate = (req, res, next) => {
   const phonesSeen = new Set();
 
   for (let i = 0; i < updates.length; i++) {
+    // FIX: Check the cap at the TOP of the iteration (same fix as validateBulkCreate).
+    if (errors.length >= 50) {
+      errors.push("...too many errors, stopping early.");
+      break;
+    }
+
     const update = updates[i];
 
     if (!update || typeof update !== "object" || Array.isArray(update)) {
@@ -181,31 +189,30 @@ export const validateBulkUpdate = (req, res, next) => {
     }
 
     const emailDisplay = update.email ?? "(missing)";
-let emailValid = false;
+    let emailValid = false;
 
-if (!update.email || typeof update.email !== "string") {
-  errors.push(`[${i}] email is required to identify the user for update.`);
-} else {
-  const normalizedEmail = update.email.toLowerCase();
-  if (!EMAIL_REGEX.test(normalizedEmail)) {
-    errors.push(`[${i}] email "${update.email}" is not valid.`);
-  } else {
-    emailValid = true;
-    if (emailsSeen.has(normalizedEmail)) {
-      errors.push(`[${i}] Duplicate email in this batch: "${normalizedEmail}".`);
+    if (!update.email || typeof update.email !== "string") {
+      errors.push(`[${i}] email is required to identify the user for update.`);
     } else {
-      emailsSeen.add(normalizedEmail);
+      const normalizedEmail = update.email.toLowerCase();
+      if (!EMAIL_REGEX.test(normalizedEmail)) {
+        errors.push(`[${i}] email "${update.email}" is not valid.`);
+      } else {
+        emailValid = true;
+        if (emailsSeen.has(normalizedEmail)) {
+          errors.push(`[${i}] Duplicate email in this batch: "${normalizedEmail}".`);
+        } else {
+          emailsSeen.add(normalizedEmail);
+        }
+        // Do NOT mutate req.body here — controller calls .toLowerCase() on every email already
+      }
     }
-    update.email = normalizedEmail;
-  }
-}
 
-const { email, ...rest } = update;
+    const { email, ...rest } = update;
 
-// Only flag "no fields" when email was valid — avoids misleading double error
-if (emailValid && Object.keys(rest).length === 0) {
-  errors.push(`[${i}] No fields provided to update for email "${emailDisplay}".`);
-}
+    if (emailValid && Object.keys(rest).length === 0) {
+      errors.push(`[${i}] No fields provided to update for email "${emailDisplay}".`);
+    }
 
     // fullName (optional; if provided must be valid)
     if (rest.fullName !== undefined) {
@@ -223,7 +230,6 @@ if (emailValid && Object.keys(rest).length === 0) {
           `[${i}] phone must be a numeric string of 10–15 digits.`
         );
       } else {
-        // FIX (Issue 6): Intra-batch duplicate phone detection for update path.
         if (phonesSeen.has(rest.phone)) {
           errors.push(`[${i}] Duplicate phone in this batch: "${rest.phone}".`);
         } else {
@@ -277,11 +283,6 @@ if (emailValid && Object.keys(rest).length === 0) {
           );
         }
       }
-    }
-
-    if (errors.length >= 50) {
-      errors.push("...too many errors, stopping early.");
-      break;
     }
   }
 

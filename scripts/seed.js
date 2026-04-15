@@ -3,6 +3,7 @@
 // Generates 5,000 unique users and POSTs them to the bulk-create endpoint.
 // Run: node scripts/seed.js
 // ─────────────────────────────────────────────────────────────────────────────
+import "dotenv/config";
 const PORT = process.env.PORT || 5000;
 const API_URL = `http://localhost:${PORT}/api/users/bulk-create`;
 const TOTAL_USERS = 5000;

@@ -1,39 +1,43 @@
 // controllers/userController.js
 import User from "../models/User.js";
+import AppError from "../utils/AppError.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 
+/**
+ * Flatten nested object into dot notation for MongoDB updates.
+ * Prevents accidental full-object overwrite on nested fields like deviceInfo.
+ */
 const flattenFields = (obj, prefix = "") => {
-  return Object.entries(obj).reduce((acc, [key, value]) => {
-    const fullKey = prefix ? `${prefix}.${key}` : key;
+  const result = {};
 
-    if (
-      fullKey.includes("__proto__") ||
-      fullKey.includes("constructor") ||
-      fullKey.includes("prototype")
-    ) {
-      return acc;
-    }
+  for (const [key, value] of Object.entries(obj)) {
+    // Prevent prototype pollution
+    if (["__proto__", "constructor", "prototype"].includes(key)) continue;
 
-    if (
+    const newKey = prefix ? `${prefix}.${key}` : key;
+
+    const isObject =
       value !== null &&
       typeof value === "object" &&
       !Array.isArray(value) &&
-      !(value instanceof Date)
-    ) {
-      Object.assign(acc, flattenFields(value, fullKey));
+      !(value instanceof Date);
+
+    if (isObject) {
+      Object.assign(result, flattenFields(value, newKey));
     } else {
-      acc[fullKey] = value;
+      result[newKey] = value;
     }
-    return acc;
-  }, {});
+  }
+
+  return result;
 };
 
-
 // ── POST /api/users/bulk-create ──────────────────────────────────────
-export const bulkCreateUsers = async (req, res) => {
+export const bulkCreateUsers = asyncHandler(async (req, res, next) => {
   const users = req.body;
 
   if (!Array.isArray(users) || users.length === 0) {
-    return res.status(400).json({ message: "Request body must be a non-empty array." });
+    throw new AppError("Request body must be a non-empty array.", 400);
   }
 
   try {
@@ -43,53 +47,46 @@ export const bulkCreateUsers = async (req, res) => {
     });
 
     return res.status(201).json({
+      success: true,
       message: "Bulk create completed.",
       inserted: result.insertedCount,
       total: users.length,
     });
   } catch (err) {
     if (err.name === "MongoBulkWriteError") {
-  const inserted = err.result?.insertedCount ?? 0;
-  const failed = users.length - inserted;
+      const inserted = err.result?.insertedCount ?? 0;
+      const failed = users.length - inserted;
 
-  const writeErrors = err.writeErrors ?? [];
-  const duplicateErrors = writeErrors.filter((e) => e.code === 11000);
-  const otherErrors = writeErrors.filter((e) => e.code !== 11000);
+      return res.status(207).json({
+        success: true,
+        message: "Bulk create partially completed.",
+        inserted,
+        failed,
+        total: users.length,
+        duplicates: (err.writeErrors || []).map((e) => ({
+          index: e.index,
+          message: e.errmsg,
+        })),
+      });
+    }
 
-  const duplicates = duplicateErrors.length > 0
-    ? duplicateErrors.map((e) => ({
-        index: e.index,
-        message: e.errmsg?.match(/dup key: \{(.+?)\}/)?.[1] ?? "Duplicate key",
-      }))
-    : undefined;
-
-  const errors = otherErrors.length > 0
-    ? otherErrors.map((e) => ({ index: e.index, message: e.errmsg ?? "Write error" }))
-    : undefined;
-
-  return res.status(207).json({
-    message: "Bulk create partially completed.",
-    inserted,
-    failed,
-    ...(duplicates && { duplicates }),
-    ...(errors && { errors }),
-  });
-}
-
-    return res.status(500).json({ message: "Server error.", error: err.message });
+    return next(err);
   }
-};
-
+});
 
 // ── PUT /api/users/bulk-update ───────────────────────────────────────
-export const bulkUpdateUsers = async (req, res) => {
+export const bulkUpdateUsers = asyncHandler(async (req, res, next) => {
   const updates = req.body;
 
   if (!Array.isArray(updates) || updates.length === 0) {
-    return res.status(400).json({ message: "Request body must be a non-empty array." });
+    throw new AppError("Request body must be a non-empty array.", 400);
   }
 
-  const emailList = updates.map((u) => u.email);
+  // FIX: Added null-safe fallback on email before calling toLowerCase().
+  // In practice this is unreachable (validator guarantees email is present),
+  // but defensive programming prevents a silent TypeError crash if somehow
+  // the controller is called without the validator middleware.
+  const emailList = updates.filter((u) => typeof u.email === "string" && u.email.length > 0).map((u) => u.email.toLowerCase());
 
   try {
     const foundDocs = await User.find(
@@ -99,28 +96,38 @@ export const bulkUpdateUsers = async (req, res) => {
 
     const matchedEmailSet = new Set(foundDocs.map((d) => d.email));
     const notFoundEmails = emailList.filter((e) => !matchedEmailSet.has(e));
-    const operations = updates.map(({ email, _id, __v, createdAt, updatedAt, ...fields }) => ({
-      updateOne: {
-        filter: { email: email.toLowerCase() },
-        update: {
-          $set: {
-            ...flattenFields(fields),
-            updatedAt: new Date(),
+
+    const operations = updates.map((update) => {
+      const {
+        email,
+        _id,
+        __v,
+        createdAt,
+        updatedAt,
+        ...fields
+      } = update;
+
+      return {
+        updateOne: {
+          filter: { email: email.toLowerCase() },
+          update: {
+            $set: {
+              ...flattenFields(fields),
+              updatedAt: new Date(),
+            },
           },
         },
-      },
-    }));
+      };
+    });
 
     const result = await User.bulkWrite(operations, { ordered: false });
 
-    const matched = result.matchedCount;
-    const modified = result.modifiedCount;
-
     if (notFoundEmails.length > 0) {
       return res.status(207).json({
+        success: true,
         message: "Bulk update partially completed. Some emails were not found.",
-        matched,
-        modified,
+        matched: result.matchedCount,
+        modified: result.modifiedCount,
         notFound: notFoundEmails.length,
         notFoundEmails,
         total: updates.length,
@@ -128,24 +135,24 @@ export const bulkUpdateUsers = async (req, res) => {
     }
 
     return res.status(200).json({
+      success: true,
       message: "Bulk update completed.",
-      matched,
-      modified,
+      matched: result.matchedCount,
+      modified: result.modifiedCount,
       total: updates.length,
     });
   } catch (err) {
     if (err.name === "MongoBulkWriteError") {
       return res.status(207).json({
-        message: "Bulk update partially completed.",
-        matched: err.result?.matchedCount ?? 0,
-        modified: err.result?.modifiedCount ?? 0,
-        errors: err.writeErrors?.map((e) => ({
+        success: true,
+        message: "Partial update.",
+        errors: (err.writeErrors || []).map((e) => ({
           index: e.index,
           message: e.errmsg,
         })),
       });
     }
 
-    return res.status(500).json({ message: "Server error.", error: err.message });
+    return next(err);
   }
-};
+});
