@@ -14,7 +14,6 @@ const MAX_BATCH_SIZE = 10000;
 const validateSingleUser = (user, index) => {
   const errors = [];
 
-  // fullName
   if (!user.fullName || typeof user.fullName !== "string") {
     errors.push(`[${index}] fullName is required and must be a string.`);
   } else if (user.fullName.trim().length < 3) {
@@ -23,55 +22,44 @@ const validateSingleUser = (user, index) => {
     errors.push(`[${index}] fullName cannot exceed 100 characters.`);
   }
 
-  // email
   if (!user.email || typeof user.email !== "string") {
     errors.push(`[${index}] email is required.`);
   } else if (!EMAIL_REGEX.test(user.email)) {
     errors.push(`[${index}] email "${user.email}" is not a valid email format.`);
   }
 
-  // phone
   if (!user.phone || typeof user.phone !== "string") {
     errors.push(`[${index}] phone is required and must be a string.`);
   } else if (!PHONE_REGEX.test(user.phone)) {
     errors.push(`[${index}] phone "${user.phone}" must be a numeric string of 10–15 digits.`);
   }
 
-  // walletBalance (optional; if provided must be a non-negative number)
   if (user.walletBalance !== undefined) {
     if (typeof user.walletBalance !== "number" || user.walletBalance < 0) {
       errors.push(`[${index}] walletBalance must be a non-negative number.`);
     }
   }
 
-  // isBlocked (optional; if provided must be boolean)
   if (user.isBlocked !== undefined && typeof user.isBlocked !== "boolean") {
-    errors.push(`[${index}] isBlocked must be a boolean (true or false).`);
+    errors.push(`[${index}] isBlocked must be a boolean.`);
   }
 
-  // kycStatus (optional; if provided must be in enum)
   if (user.kycStatus !== undefined && !VALID_KYC.includes(user.kycStatus)) {
     errors.push(
       `[${index}] kycStatus "${user.kycStatus}" is invalid. Must be one of: ${VALID_KYC.join(", ")}.`
     );
   }
 
-  // deviceInfo (optional; sub-fields validated if present)
   if (user.deviceInfo !== undefined) {
     if (typeof user.deviceInfo !== "object" || Array.isArray(user.deviceInfo)) {
       errors.push(`[${index}] deviceInfo must be an object.`);
     } else {
       const { deviceType, os } = user.deviceInfo;
-
       if (deviceType !== undefined && !VALID_DEVICE_TYPE.includes(deviceType)) {
-        errors.push(
-          `[${index}] deviceInfo.deviceType "${deviceType}" is invalid. Must be: ${VALID_DEVICE_TYPE.join(", ")}.`
-        );
+        errors.push(`[${index}] deviceInfo.deviceType "${deviceType}" is invalid.`);
       }
       if (os !== undefined && !VALID_OS.includes(os)) {
-        errors.push(
-          `[${index}] deviceInfo.os "${os}" is invalid. Must be: ${VALID_OS.join(", ")}.`
-        );
+        errors.push(`[${index}] deviceInfo.os "${os}" is invalid.`);
       }
     }
   }
@@ -85,14 +73,12 @@ export const validateBulkCreate = (req, res, next) => {
   const users = req.body;
 
   if (!Array.isArray(users) || users.length === 0) {
-    return res.status(400).json({
-      message: "Request body must be a non-empty JSON array.",
-    });
+    return res.status(400).json({ message: "Request body must be a non-empty JSON array." });
   }
 
   if (users.length > MAX_BATCH_SIZE) {
     return res.status(400).json({
-      message: `Batch size cannot exceed ${MAX_BATCH_SIZE} records. Received: ${users.length}.`,
+      message: `Batch size cannot exceed ${MAX_BATCH_SIZE}. Received: ${users.length}.`,
     });
   }
 
@@ -101,9 +87,6 @@ export const validateBulkCreate = (req, res, next) => {
   const phonesSeen = new Set();
 
   for (let i = 0; i < users.length; i++) {
-    // FIX: Check the cap at the TOP of the iteration, before pushing more errors.
-    // Previously the check was at the bottom — errors for the current record were
-    // pushed first, potentially taking allErrors beyond 50 before the cap fired.
     if (allErrors.length >= 50) {
       allErrors.push("...too many errors, fix the above issues first.");
       break;
@@ -114,12 +97,10 @@ export const validateBulkCreate = (req, res, next) => {
       continue;
     }
 
-    // ── Intra-batch duplicate check ───────────────────────
-    const normalEmail = typeof users[i].email === "string"
-      ? users[i].email.toLowerCase()
-      : null;
+    const normalEmail =
+      typeof users[i].email === "string" ? users[i].email.toLowerCase() : null;
 
-    if (normalEmail) {
+    if (normalEmail && EMAIL_REGEX.test(normalEmail)) {
       if (emailsSeen.has(normalEmail)) {
         allErrors.push(`[${i}] Duplicate email in this batch: "${normalEmail}".`);
       } else {
@@ -129,7 +110,7 @@ export const validateBulkCreate = (req, res, next) => {
 
     const phone = typeof users[i].phone === "string" ? users[i].phone : null;
 
-    if (phone) {
+    if (phone && PHONE_REGEX.test(phone)) {
       if (phonesSeen.has(phone)) {
         allErrors.push(`[${i}] Duplicate phone in this batch: "${phone}".`);
       } else {
@@ -137,14 +118,21 @@ export const validateBulkCreate = (req, res, next) => {
       }
     }
 
-    // ── Per-field validation ──────────────────────────────
-    const errors = validateSingleUser(users[i], i);
-    if (errors.length) allErrors.push(...errors);
+    const fieldErrors = validateSingleUser(users[i], i);
+
+    if (fieldErrors.length) {
+      const slots = 50 - allErrors.length;
+      allErrors.push(...fieldErrors.slice(0, slots));
+      if (fieldErrors.length > slots) {
+        allErrors.push("...too many errors, fix the above issues first.");
+        break;
+      }
+    }
   }
 
   if (allErrors.length > 0) {
     return res.status(422).json({
-      message: "Validation failed. Fix the errors before retrying.",
+      message: "Validation failed.",
       errorCount: allErrors.length,
       errors: allErrors,
     });
@@ -159,14 +147,12 @@ export const validateBulkUpdate = (req, res, next) => {
   const updates = req.body;
 
   if (!Array.isArray(updates) || updates.length === 0) {
-    return res.status(400).json({
-      message: "Request body must be a non-empty JSON array.",
-    });
+    return res.status(400).json({ message: "Request body must be a non-empty JSON array." });
   }
 
   if (updates.length > MAX_BATCH_SIZE) {
     return res.status(400).json({
-      message: `Batch size cannot exceed ${MAX_BATCH_SIZE} records. Received: ${updates.length}.`,
+      message: `Batch size cannot exceed ${MAX_BATCH_SIZE}. Received: ${updates.length}.`,
     });
   }
 
@@ -175,113 +161,109 @@ export const validateBulkUpdate = (req, res, next) => {
   const phonesSeen = new Set();
 
   for (let i = 0; i < updates.length; i++) {
-    // FIX: Check the cap at the TOP of the iteration (same fix as validateBulkCreate).
     if (errors.length >= 50) {
-      errors.push("...too many errors, stopping early.");
+      errors.push("...too many errors, fix the above issues first.");
       break;
     }
 
+    const fieldErrors = [];
     const update = updates[i];
 
     if (!update || typeof update !== "object" || Array.isArray(update)) {
-      errors.push(`[${i}] Invalid update object.`);
-      continue;
-    }
-
-    const emailDisplay = update.email ?? "(missing)";
-    let emailValid = false;
-
-    if (!update.email || typeof update.email !== "string") {
-      errors.push(`[${i}] email is required to identify the user for update.`);
+      fieldErrors.push(`[${i}] Invalid update object.`);
     } else {
-      const normalizedEmail = update.email.toLowerCase();
-      if (!EMAIL_REGEX.test(normalizedEmail)) {
-        errors.push(`[${i}] email "${update.email}" is not valid.`);
+      let emailValid = false;
+      const emailDisplay = update.email ?? "(missing)";
+
+      // ── email (required identifier) ───────────────────────
+      if (!update.email || typeof update.email !== "string") {
+        fieldErrors.push(`[${i}] email is required.`);
       } else {
-        emailValid = true;
-        if (emailsSeen.has(normalizedEmail)) {
-          errors.push(`[${i}] Duplicate email in this batch: "${normalizedEmail}".`);
+        const normalizedEmail = update.email.toLowerCase();
+        if (!EMAIL_REGEX.test(normalizedEmail)) {
+          fieldErrors.push(`[${i}] email "${update.email}" is not valid.`);
         } else {
-          emailsSeen.add(normalizedEmail);
+          emailValid = true;
+          if (emailsSeen.has(normalizedEmail)) {
+            fieldErrors.push(`[${i}] Duplicate email in this batch.`);
+          } else {
+            emailsSeen.add(normalizedEmail);
+          }
         }
-        // Do NOT mutate req.body here — controller calls .toLowerCase() on every email already
       }
-    }
 
-    const { email, ...rest } = update;
+      const { email, ...rest } = update;
 
-    if (emailValid && Object.keys(rest).length === 0) {
-      errors.push(`[${i}] No fields provided to update for email "${emailDisplay}".`);
-    }
-
-    // fullName (optional; if provided must be valid)
-    if (rest.fullName !== undefined) {
-      if (typeof rest.fullName !== "string" || rest.fullName.trim().length < 3) {
-        errors.push(`[${i}] fullName must be a string with at least 3 characters.`);
-      } else if (rest.fullName.trim().length > 100) {
-        errors.push(`[${i}] fullName cannot exceed 100 characters.`);
+      // ── must have at least one field to update ────────────
+      if (emailValid && Object.keys(rest).length === 0) {
+        fieldErrors.push(`[${i}] No fields provided for "${emailDisplay}".`);
       }
-    }
 
-    // phone — validated and checked for intra-batch duplicates
-    if (rest.phone !== undefined) {
-      if (typeof rest.phone !== "string" || !PHONE_REGEX.test(rest.phone)) {
-        errors.push(
-          `[${i}] phone must be a numeric string of 10–15 digits.`
+      // ── fullName (optional in update, but validate if present) ─
+      if (rest.fullName !== undefined) {
+        if (typeof rest.fullName !== "string") {
+          fieldErrors.push(`[${i}] fullName must be a string.`);
+        } else if (rest.fullName.trim().length < 3) {
+          fieldErrors.push(`[${i}] fullName must be at least 3 characters.`);
+        } else if (rest.fullName.trim().length > 100) {
+          fieldErrors.push(`[${i}] fullName cannot exceed 100 characters.`);
+        }
+      }
+
+      // ── phone ─────────────────────────────────────────────
+      if (rest.phone !== undefined) {
+        if (!PHONE_REGEX.test(rest.phone)) {
+          fieldErrors.push(`[${i}] phone is invalid.`);
+        } else {
+          if (phonesSeen.has(rest.phone)) {
+            fieldErrors.push(`[${i}] Duplicate phone in this batch.`);
+          } else {
+            phonesSeen.add(rest.phone);
+          }
+        }
+      }
+
+      // ── walletBalance ──────────────────────────────────────
+      if (rest.walletBalance !== undefined) {
+        if (typeof rest.walletBalance !== "number" || rest.walletBalance < 0) {
+          fieldErrors.push(`[${i}] walletBalance must be a non-negative number.`);
+        }
+      }
+
+      // ── isBlocked ──────────────────────────────────────────
+      if (rest.isBlocked !== undefined && typeof rest.isBlocked !== "boolean") {
+        fieldErrors.push(`[${i}] isBlocked must be a boolean.`);
+      }
+
+      // ── kycStatus ──────────────────────────────────────────
+      if (rest.kycStatus !== undefined && !VALID_KYC.includes(rest.kycStatus)) {
+        fieldErrors.push(
+          `[${i}] kycStatus "${rest.kycStatus}" is invalid. Must be one of: ${VALID_KYC.join(", ")}.`
         );
-      } else {
-        if (phonesSeen.has(rest.phone)) {
-          errors.push(`[${i}] Duplicate phone in this batch: "${rest.phone}".`);
+      }
+
+      // ── deviceInfo ─────────────────────────────────────────
+      if (rest.deviceInfo !== undefined) {
+        if (typeof rest.deviceInfo !== "object" || Array.isArray(rest.deviceInfo)) {
+          fieldErrors.push(`[${i}] deviceInfo must be an object.`);
         } else {
-          phonesSeen.add(rest.phone);
+          const { deviceType, os } = rest.deviceInfo;
+          if (deviceType !== undefined && !VALID_DEVICE_TYPE.includes(deviceType)) {
+            fieldErrors.push(`[${i}] deviceInfo.deviceType "${deviceType}" is invalid.`);
+          }
+          if (os !== undefined && !VALID_OS.includes(os)) {
+            fieldErrors.push(`[${i}] deviceInfo.os "${os}" is invalid.`);
+          }
         }
       }
     }
 
-    // walletBalance
-    if (rest.walletBalance !== undefined) {
-      if (typeof rest.walletBalance !== "number" || rest.walletBalance < 0) {
-        errors.push(`[${i}] walletBalance must be a non-negative number.`);
-      }
-    }
-
-    // isBlocked
-    if (rest.isBlocked !== undefined && typeof rest.isBlocked !== "boolean") {
-      errors.push(`[${i}] isBlocked must be a boolean (true or false).`);
-    }
-
-    // kycStatus
-    if (rest.kycStatus !== undefined && !VALID_KYC.includes(rest.kycStatus)) {
-      errors.push(
-        `[${i}] kycStatus "${rest.kycStatus}" is invalid. Must be one of: ${VALID_KYC.join(", ")}.`
-      );
-    }
-
-    // deviceInfo
-    if (rest.deviceInfo !== undefined) {
-      if (
-        typeof rest.deviceInfo !== "object" ||
-        Array.isArray(rest.deviceInfo) ||
-        rest.deviceInfo === null
-      ) {
-        errors.push(`[${i}] deviceInfo must be a plain object.`);
-      } else {
-        if (
-          rest.deviceInfo.deviceType !== undefined &&
-          !VALID_DEVICE_TYPE.includes(rest.deviceInfo.deviceType)
-        ) {
-          errors.push(
-            `[${i}] deviceInfo.deviceType "${rest.deviceInfo.deviceType}" is invalid. Must be: ${VALID_DEVICE_TYPE.join(", ")}.`
-          );
-        }
-        if (
-          rest.deviceInfo.os !== undefined &&
-          !VALID_OS.includes(rest.deviceInfo.os)
-        ) {
-          errors.push(
-            `[${i}] deviceInfo.os "${rest.deviceInfo.os}" is invalid. Must be: ${VALID_OS.join(", ")}.`
-          );
-        }
+    if (fieldErrors.length) {
+      const slots = 50 - errors.length;
+      errors.push(...fieldErrors.slice(0, slots));
+      if (fieldErrors.length > slots) {
+        errors.push("...too many errors, fix the above issues first.");
+        break;
       }
     }
   }

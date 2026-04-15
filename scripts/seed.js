@@ -7,7 +7,7 @@ import "dotenv/config";
 const PORT = process.env.PORT || 5000;
 const API_URL = `http://localhost:${PORT}/api/users/bulk-create`;
 const TOTAL_USERS = 5000;
-const BATCH_SIZE = 1000; // send in batches of 1000 to avoid one giant request
+const BATCH_SIZE = 1000; 
 
 // ── Data pools ────────────────────────────────────────────────────────────────
 const FIRST_NAMES = [
@@ -104,7 +104,7 @@ const sendBatch = async (batch, batchNumber) => {
     console.log(`  Batch ${batchNumber}: HTTP ${res.status}`);
 
     if (res.status === 201) {
-  const inserted = data.inserted ?? data.insertedCount ?? data.count ?? batch.length;
+  const inserted = data.inserted ?? data.insertedCount ?? data.count ?? 0;
   console.log(`  ✅ Inserted: ${inserted} / ${data.total ?? batch.length}`);
 } else if (res.status === 207) {
   const inserted = data.inserted ?? data.insertedCount ?? data.count ?? 0;
@@ -148,7 +148,7 @@ const main = async () => {
   const result = await sendBatch(batch, i + 1);
   
   // Use the same fallback logic as the per‑batch logging
-  const inserted = result.inserted ?? result.insertedCount ?? result.count ?? batch.length;
+  const inserted = result.inserted ?? result.insertedCount ?? result.count ?? 0;
   const failed = result.failed ?? result.failedCount ?? (batch.length - inserted);
   
   totalInserted += inserted;

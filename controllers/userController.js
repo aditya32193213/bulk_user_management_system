@@ -3,32 +3,22 @@ import User from "../models/User.js";
 import AppError from "../utils/AppError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
-/**
- * Flatten nested object into dot notation for MongoDB updates.
- * Prevents accidental full-object overwrite on nested fields like deviceInfo.
- */
 const flattenFields = (obj, prefix = "") => {
   const result = {};
-
   for (const [key, value] of Object.entries(obj)) {
-    // Prevent prototype pollution
     if (["__proto__", "constructor", "prototype"].includes(key)) continue;
-
     const newKey = prefix ? `${prefix}.${key}` : key;
-
     const isObject =
       value !== null &&
       typeof value === "object" &&
       !Array.isArray(value) &&
       !(value instanceof Date);
-
     if (isObject) {
       Object.assign(result, flattenFields(value, newKey));
     } else {
       result[newKey] = value;
     }
   }
-
   return result;
 };
 
@@ -46,6 +36,22 @@ export const bulkCreateUsers = asyncHandler(async (req, res, next) => {
       includeResultMetadata: true,
     });
 
+    const mongooseValidationErrors = result.mongoose?.validationErrors ?? [];
+
+    if (mongooseValidationErrors.length > 0) {
+      return res.status(207).json({
+        success: true,
+        message: "Bulk create partially completed.",
+        inserted: result.insertedCount,
+        failed: mongooseValidationErrors.length,
+        total: users.length,
+        errors: mongooseValidationErrors.map((e) => ({
+          path: e.path,
+          message: e.message,
+        })),
+      });
+    }
+
     return res.status(201).json({
       success: true,
       message: "Bulk create completed.",
@@ -56,7 +62,6 @@ export const bulkCreateUsers = asyncHandler(async (req, res, next) => {
     if (err.name === "MongoBulkWriteError") {
       const inserted = err.result?.insertedCount ?? 0;
       const failed = users.length - inserted;
-
       return res.status(207).json({
         success: true,
         message: "Bulk create partially completed.",
@@ -69,7 +74,6 @@ export const bulkCreateUsers = asyncHandler(async (req, res, next) => {
         })),
       });
     }
-
     return next(err);
   }
 });
@@ -78,15 +82,9 @@ export const bulkCreateUsers = asyncHandler(async (req, res, next) => {
 export const bulkUpdateUsers = asyncHandler(async (req, res, next) => {
   const updates = req.body;
 
-  if (!Array.isArray(updates) || updates.length === 0) {
-    throw new AppError("Request body must be a non-empty array.", 400);
-  }
-
-  // FIX: Added null-safe fallback on email before calling toLowerCase().
-  // In practice this is unreachable (validator guarantees email is present),
-  // but defensive programming prevents a silent TypeError crash if somehow
-  // the controller is called without the validator middleware.
-  const emailList = updates.filter((u) => typeof u.email === "string" && u.email.length > 0).map((u) => u.email.toLowerCase());
+  const emailList = updates
+    .filter((u) => typeof u.email === "string" && u.email.length > 0)
+    .map((u) => u.email.toLowerCase());
 
   try {
     const foundDocs = await User.find(
@@ -97,28 +95,23 @@ export const bulkUpdateUsers = asyncHandler(async (req, res, next) => {
     const matchedEmailSet = new Set(foundDocs.map((d) => d.email));
     const notFoundEmails = emailList.filter((e) => !matchedEmailSet.has(e));
 
-    const operations = updates.map((update) => {
-      const {
-        email,
-        _id,
-        __v,
-        createdAt,
-        updatedAt,
-        ...fields
-      } = update;
-
-      return {
-        updateOne: {
-          filter: { email: email.toLowerCase() },
-          update: {
-            $set: {
-              ...flattenFields(fields),
-              updatedAt: new Date(),
+    // ← FIX: removed the stale "Replace the operations declaration" dev comment
+    const operations = updates
+      .filter((u) => typeof u.email === "string" && u.email.length > 0)
+      .map((update) => {
+        const { email, _id, __v, createdAt, updatedAt, ...fields } = update;
+        return {
+          updateOne: {
+            filter: { email: email.toLowerCase() },
+            update: {
+              $set: {
+                ...flattenFields(fields),
+                updatedAt: new Date(),
+              },
             },
           },
-        },
-      };
-    });
+        };
+      });
 
     const result = await User.bulkWrite(operations, { ordered: false });
 
@@ -146,13 +139,15 @@ export const bulkUpdateUsers = asyncHandler(async (req, res, next) => {
       return res.status(207).json({
         success: true,
         message: "Partial update.",
+        matched: err.result?.matchedCount ?? 0,
+        modified: err.result?.modifiedCount ?? 0,
+        total: updates.length,
         errors: (err.writeErrors || []).map((e) => ({
           index: e.index,
           message: e.errmsg,
         })),
       });
     }
-
     return next(err);
   }
 });

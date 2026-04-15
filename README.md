@@ -410,8 +410,9 @@ Expected output:
 ```json
 [
   { "v": 2, "key": { "_id": 1 }, "name": "_id_" },
-  { "v": 2, "key": { "email": 1 }, "name": "email_1", "unique": true, "background": false },
-  { "v": 2, "key": { "phone": 1 }, "name": "phone_1", "unique": true, "background": false },
+  { "v": 2, "key": { "email": 1 }, "name": "email_1", "unique": true },
+  { "v": 2, "key": { "phone": 1 }, "name": "phone_1", "unique": true },
+  { "v": 2, "key": { "createdAt": -1 }, "name": "createdAt_-1" },
   { "v": 2, "key": { "kycStatus": 1, "isBlocked": 1 }, "name": "kycStatus_1_isBlocked_1" }
 ]
 ```
@@ -422,6 +423,7 @@ Expected output:
 | `email_1` | `email` | Unique | Fast lookup by email; enforces no duplicates |
 | `phone_1` | `phone` | Unique | Fast lookup by phone; enforces no duplicates |
 | `kycStatus_1_isBlocked_1` | `kycStatus`, `isBlocked` | Compound (Bonus) | Optimises admin queries filtering by KYC status AND block state simultaneously |
+| `createdAt_-1` | `createdAt` | Descending | Fast latest-first pagination queries |
 
 ### 💡 Why the compound index?
 

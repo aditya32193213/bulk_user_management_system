@@ -78,6 +78,8 @@ const userSchema = new mongoose.Schema(
   }
 );
 
+
+userSchema.index({ createdAt: -1 });   // 🔥 NEW: fast latest-first queries
 userSchema.index({ kycStatus: 1, isBlocked: 1 });
 
 const User = mongoose.model("User", userSchema);
