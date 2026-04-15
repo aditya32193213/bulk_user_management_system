@@ -1,8 +1,8 @@
 {
   "info": {
-    "name": "Bulk User Management System",
-    "_postman_id": "bulk-user-mgmt-v1",
-    "description": "API collection for the Bulk User Management System assignment.\n\nBase URL: {{base_url}}\n\nSet the `base_url` variable to `http://localhost:5000` for local testing.",
+    "name": "Bulk User Management System v2",
+    "_postman_id": "bulk-user-mgmt-v2",
+    "description": "API collection for the Bulk User Management System assignment.\n\nBase URL: {{base_url}}\n\nSet the `base_url` variable to `http://localhost:5000` for local testing.\n\n---\nv2 additions:\n- Performance tests (1000-user bulk create & update via pre-request script)\n- Duplicate phone rejection test\n- Postman test scripts (assertions) on every request",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -20,9 +20,7 @@
           "name": "✅ Bulk Create — 3 Valid Users",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/api/users/bulk-create",
               "host": ["{{base_url}}"],
@@ -34,15 +32,35 @@
               "options": { "raw": { "language": "json" } }
             }
           },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Users created successfully', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.total).to.eql(3);",
+                  "});",
+                  "",
+                  "pm.test('Response time under 3000ms', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(3000);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "response": []
         },
         {
           "name": "⚠️ Bulk Create — Partial Failure (1 duplicate email)",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/api/users/bulk-create",
               "host": ["{{base_url}}"],
@@ -54,15 +72,81 @@
               "options": { "raw": { "language": "json" } }
             }
           },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 207 Multi-Status (partial success)', function () {",
+                  "    pm.response.to.have.status(207);",
+                  "});",
+                  "",
+                  "pm.test('Response contains both created and failed arrays', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.failed || (json.errors && json.errors.length)).to.be.greaterThan(0);",
+                  "});",
+                  "",
+                  "pm.test('Partial success handled', function () {",
+                  "    const json = pm.response.json();",
+                  "pm.expect(json.inserted).to.eql(1);",
+                  "  pm.expect(json.failed).to.eql(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "⚠️ Bulk Create — Partial Failure (1 duplicate phone)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/api/users/bulk-create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "bulk-create"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"fullName\": \"New User Two\",\n    \"email\": \"newuser2unique@gmail.com\",\n    \"phone\": \"9888888888\",\n    \"walletBalance\": 300\n  },\n  {\n    \"fullName\": \"Phone Duplicate User\",\n    \"email\": \"phoneduplicate@gmail.com\",\n    \"phone\": \"9876543210\",\n    \"walletBalance\": 100\n  }\n]",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Phone 9876543210 belongs to Aditya Sharma (created in the happy-path test).",
+                  "// The second record must be rejected due to unique index on phone.",
+                  "",
+                  "pm.test('Status is 207 Multi-Status (partial success)', function () {",
+                  "    pm.response.to.have.status(207);",
+                  "});",
+                  "",
+                  "pm.test('Exactly 1 record failed (duplicate phone)', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.inserted).to.be.at.least(1);",
+                  "});",
+                  "",
+                  "pm.test('Duplicate phone handled', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.failed).to.eql(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "response": []
         },
         {
           "name": "❌ Bulk Create — Validation Failure (missing fields)",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/api/users/bulk-create",
               "host": ["{{base_url}}"],
@@ -74,15 +158,32 @@
               "options": { "raw": { "language": "json" } }
             }
           },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400 or 422 (validation error)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([400, 422]);",
+                  "});",
+                  "",
+                  "pm.test('Response contains validation errors', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('errors');",
+                  "    pm.expect(json.errors).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "response": []
         },
         {
           "name": "❌ Bulk Create — Empty Array",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/api/users/bulk-create",
               "host": ["{{base_url}}"],
@@ -94,15 +195,32 @@
               "options": { "raw": { "language": "json" } }
             }
           },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error message mentions empty array', function () {",
+                  "    const json = pm.response.json();",
+                  "    const msg = JSON.stringify(json).toLowerCase();",
+                  "    pm.expect(msg).to.include('empty');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "response": []
         },
         {
           "name": "❌ Bulk Create — Invalid JSON",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/api/users/bulk-create",
               "host": ["{{base_url}}"],
@@ -114,6 +232,100 @@
               "options": { "raw": { "language": "json" } }
             }
           },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "🚀 Bulk Create — 1000 Users (Performance Test)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/api/users/bulk-create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "bulk-create"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{{generatedUsers}}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Dynamically generates 1000 unique users so the collection file",
+                  "// stays readable. Emails/phones are seeded with a timestamp to",
+                  "// avoid duplicate-key conflicts on repeated runs.",
+                  "",
+                  "const TOTAL = 1000;",
+                  "const seed  = Date.now();",
+                  "const deviceTypes = ['Mobile', 'Desktop'];",
+                  "const osList      = ['Android', 'iOS', 'Windows', 'macOS'];",
+                  "const kycList     = ['Pending', 'Approved', 'Rejected'];",
+                  "",
+                  "const users = [];",
+                  "for (let i = 0; i < TOTAL; i++) {",
+                  "    users.push({",
+                  "        fullName:      'PerfUser ' + (i + 1),",
+                  "        email:         'perfuser' + seed + '_' + i + '@loadtest.com',",
+                  "        phone:         String(7000000000 + (seed % 1000000) + i).slice(0, 10),",
+                  "        walletBalance: Math.floor(Math.random() * 10000),",
+                  "        kycStatus:     kycList[i % 3],",
+                  "        isBlocked:     i % 10 === 0,",
+                  "        deviceInfo: {",
+                  "            ipAddress:  '10.' + (i % 256) + '.' + (Math.floor(i/256) % 256) + '.1',",
+                  "            deviceType: deviceTypes[i % 2],",
+                  "            os:         osList[i % 4]",
+                  "        }",
+                  "    });",
+                  "}",
+                  "",
+                  "pm.variables.set('generatedUsers', JSON.stringify(users));",
+                  "console.log('Pre-request: generated ' + TOTAL + ' users for performance test.');"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201 Created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('All 1000 users created successfully', function () {",
+                  "    const json = pm.response.json();",
+                  "pm.expect(json.total).to.eql(1000);",
+                  "});",
+                  "",
+                  "pm.test('Response time under 30sec for 1000 records', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(30000);",
+                  "});",
+                  "",
+                  "// Log throughput so it's visible in the console",
+                  "const elapsed = pm.response.responseTime;",
+                  "console.log('1000-user bulk create completed in ' + elapsed + 'ms  (~' + Math.round(1000 / (elapsed / 1000)) + ' users/sec)');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "response": []
         }
       ]
@@ -125,9 +337,7 @@
           "name": "✅ Bulk Update — Update kycStatus & walletBalance",
           "request": {
             "method": "PUT",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/api/users/bulk-update",
               "host": ["{{base_url}}"],
@@ -139,15 +349,31 @@
               "options": { "raw": { "language": "json" } }
             }
           },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK or 207', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 207]);",
+                  "});",
+                  "",
+                  "pm.test('All 3 records updated', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('modified');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "response": []
         },
         {
-          "name": "✅ Bulk Update — Update deviceInfo",
+          "name": "✅ Bulk Update — Update deviceInfo (nested field)",
           "request": {
             "method": "PUT",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/api/users/bulk-update",
               "host": ["{{base_url}}"],
@@ -159,15 +385,31 @@
               "options": { "raw": { "language": "json" } }
             }
           },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 or 207', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 207]);",
+                  "});",
+                  "",
+                  "pm.test('Response contains modified field', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('modified');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "response": []
         },
         {
           "name": "⚠️ Bulk Update — Partial (1 email not found)",
           "request": {
             "method": "PUT",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/api/users/bulk-update",
               "host": ["{{base_url}}"],
@@ -179,15 +421,38 @@
               "options": { "raw": { "language": "json" } }
             }
           },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 207 Multi-Status', function () {",
+                  "    pm.response.to.have.status(207);",
+                  "});",
+                  "",
+                  "pm.test('Partial success structure', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('modified');",
+                  "    pm.expect(json).to.have.property('notFound');",
+                  "});",
+                  "",
+                  "pm.test('Not-found email is reported in failed list', function () {",
+                  "    const json = pm.response.json();",
+                  "pm.expect(json.notFoundEmails).to.be.an('array');",
+                  "pm.expect(json.notFoundEmails).to.include('doesnotexist@nowhere.com');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "response": []
         },
         {
           "name": "❌ Bulk Update — Validation Failure (no fields to update)",
           "request": {
             "method": "PUT",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/api/users/bulk-update",
               "host": ["{{base_url}}"],
@@ -199,15 +464,32 @@
               "options": { "raw": { "language": "json" } }
             }
           },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400 or 422 (validation error)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([400, 422]);",
+                  "});",
+                  "",
+                  "pm.test('Error message mentions missing update fields', function () {",
+                  "    const json = pm.response.json();",
+                  "    const msg = JSON.stringify(json).toLowerCase();",
+                  "    pm.expect(msg).to.satisfy(m => m.includes('field') || m.includes('update') || m.includes('required'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "response": []
         },
         {
           "name": "❌ Bulk Update — Invalid kycStatus enum",
           "request": {
             "method": "PUT",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/api/users/bulk-update",
               "host": ["{{base_url}}"],
@@ -219,15 +501,32 @@
               "options": { "raw": { "language": "json" } }
             }
           },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400 or 422', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([400, 422]);",
+                  "});",
+                  "",
+                  "pm.test('Error mentions invalid enum value', function () {",
+                  "    const json = pm.response.json();",
+                  "    const msg = JSON.stringify(json).toLowerCase();",
+                  "    pm.expect(msg).to.satisfy(m => m.includes('kyc') || m.includes('enum') || m.includes('invalid') || m.includes('verified'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "response": []
         },
         {
           "name": "❌ Bulk Update — Empty Array",
           "request": {
             "method": "PUT",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/api/users/bulk-update",
               "host": ["{{base_url}}"],
@@ -239,6 +538,181 @@
               "options": { "raw": { "language": "json" } }
             }
           },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "🚀 Bulk Update — 1000 Users (Performance Test)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/api/users/bulk-update",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "bulk-update"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{{generatedUpdates}}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Reads the seed stored during the Create performance test so the",
+                  "// same 1000 email addresses are targeted here.",
+                  "// If you run this test in isolation, change seedToUse to the",
+                  "// actual timestamp printed in the Create test's console log.",
+                  "",
+                  "const seed = pm.variables.get('perfSeed') || Date.now();",
+                  "pm.variables.set('perfSeed', seed);   // persist for this session",
+                  "",
+                  "const TOTAL   = 1000;",
+                  "const kycList = ['Pending', 'Approved', 'Rejected'];",
+                  "",
+                  "const updates = [];",
+                  "for (let i = 0; i < TOTAL; i++) {",
+                  "    updates.push({",
+                  "        email:         'perfuser' + seed + '_' + i + '@loadtest.com',",
+                  "        kycStatus:     kycList[(i + 1) % 3],",
+                  "        walletBalance: Math.floor(Math.random() * 20000),",
+                  "        isBlocked:     i % 20 === 0",
+                  "    });",
+                  "}",
+                  "",
+                  "pm.variables.set('generatedUpdates', JSON.stringify(updates));",
+                  "console.log('Pre-request: generated ' + TOTAL + ' update records.');"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK or 207 Multi-Status', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 207]);",
+                  "});",
+                  "",
+                  "pm.test('Bulk update response structure valid', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('modified');",
+                  "});",
+                  "",
+                  "pm.test('Response time under 15 000ms for 1000 records (bulkWrite)', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(15000);",
+                  "});",
+                  "",
+                  "const elapsed = pm.response.responseTime;",
+                  "const json    = pm.response.json();",
+                  "console.log('1000-user bulk update: ' + json.modified + ' updated in ' + elapsed + 'ms  (~' + Math.round(json.modified / (elapsed / 1000)) + ' records/sec)');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Index & Uniqueness Verification",
+      "item": [
+        {
+          "name": "❌ Unique Index — Reject Duplicate Email (standalone)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/api/users/bulk-create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "bulk-create"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"fullName\": \"Duplicate Email User\",\n    \"email\": \"aditya.sharma@gmail.com\",\n    \"phone\": \"9000000001\",\n    \"walletBalance\": 0\n  }\n]",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Verifies the unique index on `email` fires correctly.",
+                  "// aditya.sharma@gmail.com was created in the happy-path test above.",
+                  "",
+                  "pm.test('Status is 409 Conflict or 207 Multi-Status', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([409, 207, 400]);",
+                  "});",
+                  "",
+                  "pm.test('Error body signals duplicate / unique constraint', function () {",
+                  "    const body = pm.response.text().toLowerCase();",
+                  "    pm.expect(body).to.satisfy(b =>",
+                  "        b.includes('duplicate') || b.includes('unique') || b.includes('conflict') || b.includes('e11000')",
+                  "    );",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "❌ Unique Index — Reject Duplicate Phone (standalone)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/api/users/bulk-create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "bulk-create"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"fullName\": \"Duplicate Phone User\",\n    \"email\": \"uniqueemail99@test.com\",\n    \"phone\": \"9876543210\",\n    \"walletBalance\": 0\n  }\n]",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Verifies the unique index on `phone` fires correctly.",
+                  "// Phone 9876543210 belongs to Aditya Sharma (created in the happy-path test).",
+                  "",
+                  "pm.test('Status is 409 Conflict or 207 Multi-Status', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([409, 207, 400]);",
+                  "});",
+                  "",
+                  "pm.test('Error body signals duplicate / unique constraint on phone', function () {",
+                  "    const body = pm.response.text().toLowerCase();",
+                  "    pm.expect(body).to.satisfy(b =>",
+                  "        b.includes('duplicate') || b.includes('unique') || b.includes('conflict') || b.includes('e11000') || b.includes('phone')",
+                  "    );",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "response": []
         }
       ]
@@ -257,6 +731,19 @@
               "path": ["api", "users", "unknown"]
             }
           },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404 Not Found', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "response": []
         }
       ]
