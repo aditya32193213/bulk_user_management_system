@@ -41,10 +41,9 @@ export const bulkCreateUsers = async (req, res, next) => {
       return res.status(207).json({
         success: true,
         message: "Bulk create partially completed.",
-        inserted: result.insertedCount,
+        inserted: result.length,
         failed: mongooseValidationErrors.length,
         total: users.length,
-        // FIX: correctly traverse into each ValidatorError child
         errors: mongooseValidationErrors.flatMap((e) =>
           Object.values(e.errors || {}).map((ve) => ({
             path: ve.path,
@@ -57,12 +56,12 @@ export const bulkCreateUsers = async (req, res, next) => {
     return res.status(201).json({
       success: true,
       message: "Bulk create completed.",
-      inserted: result.insertedCount,
+      inserted: result.length,
       total: users.length,
     });
   } catch (err) {
     if (err.name === "MongoBulkWriteError") {
-      const inserted = err.result?.insertedCount ?? 0;
+      const inserted = err.insertedDocs?.length ?? err.result?.nInserted ?? 0;
       const failed = users.length - inserted;
       return res.status(207).json({
         success: true,
