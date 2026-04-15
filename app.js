@@ -9,8 +9,6 @@ import { notFound, errorHandler } from "./middleware/errorHandler.js";
 
 const app = express();
 
-// ← FIX: Trust the first proxy hop (required for Render/any reverse proxy)
-// Without this, req.ip = proxy IP and rate limiting breaks for all users
 app.set("trust proxy", 1);
 
 app.use(helmet());
