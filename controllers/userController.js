@@ -1,7 +1,6 @@
 // controllers/userController.js
 import User from "../models/User.js";
 import AppError from "../utils/AppError.js";
-import { asyncHandler } from "../utils/asyncHandler.js";
 
 const flattenFields = (obj, prefix = "") => {
   const result = {};
@@ -23,11 +22,11 @@ const flattenFields = (obj, prefix = "") => {
 };
 
 // ── POST /api/users/bulk-create ──────────────────────────────────────
-export const bulkCreateUsers = asyncHandler(async (req, res, next) => {
+export const bulkCreateUsers = async (req, res, next) => {
   const users = req.body;
 
   if (!Array.isArray(users) || users.length === 0) {
-    throw new AppError("Request body must be a non-empty array.", 400);
+    return next(new AppError("Request body must be a non-empty array.", 400));
   }
 
   try {
@@ -45,10 +44,13 @@ export const bulkCreateUsers = asyncHandler(async (req, res, next) => {
         inserted: result.insertedCount,
         failed: mongooseValidationErrors.length,
         total: users.length,
-        errors: mongooseValidationErrors.map((e) => ({
-          path: e.path,
-          message: e.message,
-        })),
+        // FIX: correctly traverse into each ValidatorError child
+        errors: mongooseValidationErrors.flatMap((e) =>
+          Object.values(e.errors || {}).map((ve) => ({
+            path: ve.path,
+            message: ve.message,
+          }))
+        ),
       });
     }
 
@@ -76,11 +78,16 @@ export const bulkCreateUsers = asyncHandler(async (req, res, next) => {
     }
     return next(err);
   }
-});
+};
 
 // ── PUT /api/users/bulk-update ───────────────────────────────────────
-export const bulkUpdateUsers = asyncHandler(async (req, res, next) => {
+export const bulkUpdateUsers = async (req, res, next) => {
   const updates = req.body;
+
+  // FIX: add matching guard to be consistent with bulkCreateUsers
+  if (!Array.isArray(updates) || updates.length === 0) {
+    return next(new AppError("Request body must be a non-empty array.", 400));
+  }
 
   const emailList = updates
     .filter((u) => typeof u.email === "string" && u.email.length > 0)
@@ -95,7 +102,6 @@ export const bulkUpdateUsers = asyncHandler(async (req, res, next) => {
     const matchedEmailSet = new Set(foundDocs.map((d) => d.email));
     const notFoundEmails = emailList.filter((e) => !matchedEmailSet.has(e));
 
-    // ← FIX: removed the stale "Replace the operations declaration" dev comment
     const operations = updates
       .filter((u) => typeof u.email === "string" && u.email.length > 0)
       .map((update) => {
@@ -150,4 +156,4 @@ export const bulkUpdateUsers = asyncHandler(async (req, res, next) => {
     }
     return next(err);
   }
-});
+};
